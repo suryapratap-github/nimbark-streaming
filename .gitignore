@@ -7,6 +7,12 @@ build
 .packages
 coverage
 .env
+*.env_local
+*.env_live
+apps/admin/.env_local
+apps/admin/.env_live
+apps/backend/.env_local
+apps/backend/.env_live
 .DS_Store
 *.log
 serviceAccountKey.json
