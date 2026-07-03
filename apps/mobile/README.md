@@ -23,7 +23,7 @@ flutter pub get
 flutter run
 ```
 
-The app defaults to `http://127.0.0.1:4000/api`. For Android emulator, use:
+The app defaults to `https://nimbark-backend-r1mo.onrender.com/api`. For Android emulator with a local backend, use:
 
 ```bash
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api
