@@ -1,6 +1,9 @@
 {
   "name": "nimbark-streaming",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "workspaces": [
     "apps/backend",
     "apps/admin"
