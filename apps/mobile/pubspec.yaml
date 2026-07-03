@@ -1,0 +1,31 @@
+name: nimbark_mobile
+description: Flutter mobile app for Nimbark Streaming.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  geolocator: ^12.0.0
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  livekit_client: ^2.8.1
+  permission_handler: ^12.0.3
+  file_picker: ^10.3.10
+  video_player: ^2.11.1
+  video_compress: ^3.1.4
+  purchases_flutter: ^10.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "644822059368",
+    "project_id": "nimbark-streaming",
+    "storage_bucket": "nimbark-streaming.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:644822059368:android:d40b33c046e8926cec6edd",
+        "android_client_info": {
+          "package_name": "com.nimbarkstreaming.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "644822059368-g0jtssbu43pancgh19qtj621kldj51sk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoH2zGqd82HZwSFs1CNicyNa-34r-Ve-g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "644822059368-g0jtssbu43pancgh19qtj621kldj51sk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "644822059368-6kcorbne2mr1ps1b8so601s2qvo3po44.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.nimbarkstreaming.mobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

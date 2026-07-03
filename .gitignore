@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.dart_tool
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+coverage
+.env
+.DS_Store
+*.log
+serviceAccountKey.json
+*service-account*.json
+firebase-service-account*.json
+*firebase-adminsdk*.json

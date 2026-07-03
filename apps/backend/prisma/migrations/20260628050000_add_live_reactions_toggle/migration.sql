@@ -1,0 +1,1 @@
+ALTER TABLE "LiveRoom" ADD COLUMN "reactionsOn" BOOLEAN NOT NULL DEFAULT true;

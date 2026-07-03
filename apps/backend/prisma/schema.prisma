@@ -1,0 +1,642 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  CREATOR
+  ADMIN
+}
+
+enum MediaType {
+  VIDEO
+  REEL
+  THUMBNAIL
+  LIVE_RECORDING
+}
+
+enum PublishStatus {
+  DRAFT
+  PROCESSING
+  PUBLISHED
+  REJECTED
+  DELETED
+}
+
+enum NotificationType {
+  FOLLOW
+  COMMENT
+  LIKE
+  LIVE_STARTED
+  SYSTEM
+}
+
+enum LiveRoomStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  REJECTED
+}
+
+enum ReportTargetType {
+  USER
+  VIDEO
+  REEL
+  COMMENT
+  LIVE_ROOM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  REVENUECAT
+}
+
+enum CreatorRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StorageProvider {
+  LOCAL
+  R2
+}
+
+enum MediaProcessingJobType {
+  TRANSCODE_VIDEO
+  TRANSCODE_REEL
+  TRANSCODE_LIVE_RECORDING
+}
+
+enum MediaProcessingJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+model User {
+  id                    String                  @id @default(cuid())
+  email                 String                  @unique
+  passwordHash          String
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  displayName           String
+  username              String                  @unique
+  bio                   String?
+  avatarUrl             String?
+  role                  UserRole                @default(USER)
+  isActive              Boolean                 @default(true)
+  lastLatitude          Float?
+  lastLongitude         Float?
+  locationSource        String?
+  locationUpdatedAt     DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  sessions              UserSession[]
+  pushDeviceTokens      PushDeviceToken[]
+  locations             UserLocation[]
+  videos                Video[]
+  reels                 Reel[]
+  comments              Comment[]
+  likes                 Like[]
+  feedViews             FeedView[]
+  creatorLikesGiven     CreatorLike[]           @relation("CreatorLikeUser")
+  creatorLikesReceived  CreatorLike[]           @relation("CreatorLikedCreator")
+  dislikes              Dislike[]
+  shares                Share[]
+  creatorSharesGiven    CreatorShare[]          @relation("CreatorShareUser")
+  creatorSharesReceived CreatorShare[]          @relation("CreatorSharedCreator")
+  following             Follow[]                @relation("Follower")
+  followers             Follow[]                @relation("Following")
+  notifications         Notification[]
+  liveRooms             LiveRoom[]              @relation("LiveHost")
+  liveRoomBlocks        LiveRoomBlock[]         @relation("LiveRoomBlockedUser")
+  liveViewerSessions    LiveRoomViewerSession[]
+  reportsMade           Report[]                @relation("ReportReporter")
+  reportsAgainst        Report[]                @relation("ReportSubjectUser")
+  auditLogs             AdminAuditLog[]
+  subscriptions         UserSubscription[]
+  paymentEvents         PaymentEvent[]
+  creatorRequests       CreatorRequest[]
+
+  @@index([role, isActive, createdAt])
+  @@index([isActive, createdAt])
+}
+
+model UserLocation {
+  id        String   @id @default(cuid())
+  userId    String
+  latitude  Float
+  longitude Float
+  source    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model PushDeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([updatedAt])
+}
+
+model MediaAsset {
+  id          String          @id @default(cuid())
+  ownerId     String
+  type        MediaType
+  bucket      String
+  objectKey   String          @unique
+  publicUrl   String?
+  contentType String
+  sizeBytes   Int?
+  durationMs  Int?
+  width       Int?
+  height      Int?
+  createdAt   DateTime        @default(now())
+  videos      Video[]         @relation("VideoAsset")
+  thumbnails  Video[]         @relation("VideoThumbnail")
+  reels       Reel[]          @relation("ReelAsset")
+  reelThumbs  Reel[]          @relation("ReelThumbnail")
+  recordings  LiveRecording[]
+  processingJobs MediaProcessingJob[]
+
+  @@index([ownerId, type, createdAt])
+  @@index([bucket, createdAt])
+}
+
+model StorageSetting {
+  id             String          @id @default("default")
+  provider       StorageProvider @default(LOCAL)
+  localBasePath  String          @default("storage/media")
+  localPublicUrl String          @default("/api/media/local")
+  videoCompressionEnabled Boolean @default(false)
+  r2Bucket       String?
+  r2Endpoint     String?
+  r2Region       String          @default("auto")
+  r2AccessKeyId  String?
+  r2SecretKey    String?
+  r2PublicUrl    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model MediaProcessingJob {
+  id             String                   @id @default(cuid())
+  type           MediaProcessingJobType
+  status         MediaProcessingJobStatus @default(QUEUED)
+  mediaAssetId   String
+  videoId        String?
+  reelId         String?
+  liveRecordingId String?
+  attempts       Int                      @default(0)
+  maxAttempts    Int                      @default(3)
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  mediaAsset     MediaAsset               @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  video          Video?                   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  reel           Reel?                    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  liveRecording  LiveRecording?           @relation(fields: [liveRecordingId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([mediaAssetId])
+  @@index([videoId])
+  @@index([reelId])
+  @@index([liveRecordingId])
+}
+
+model Video {
+  id              String        @id @default(cuid())
+  creatorId       String
+  mediaAssetId    String
+  thumbnailId     String?
+  title           String
+  description     String?
+  status          PublishStatus @default(PROCESSING)
+  commentsEnabled Boolean       @default(true)
+  viewCount       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  creator         User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset    @relation("VideoAsset", fields: [mediaAssetId], references: [id])
+  thumbnail       MediaAsset?   @relation("VideoThumbnail", fields: [thumbnailId], references: [id])
+  comments        Comment[]
+  likes           Like[]
+  feedViews       FeedView[]
+  dislikes        Dislike[]
+  shares          Share[]
+  processingJobs  MediaProcessingJob[]
+
+  @@index([status, createdAt])
+  @@index([creatorId, status, createdAt])
+  @@index([mediaAssetId])
+}
+
+model Reel {
+  id              String        @id @default(cuid())
+  creatorId       String
+  mediaAssetId    String
+  thumbnailId     String?
+  caption         String?
+  status          PublishStatus @default(PROCESSING)
+  commentsEnabled Boolean       @default(true)
+  viewCount       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  creator         User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset    @relation("ReelAsset", fields: [mediaAssetId], references: [id])
+  thumbnail       MediaAsset?   @relation("ReelThumbnail", fields: [thumbnailId], references: [id])
+  comments        Comment[]
+  likes           Like[]
+  feedViews       FeedView[]
+  dislikes        Dislike[]
+  shares          Share[]
+  processingJobs  MediaProcessingJob[]
+
+  @@index([status, createdAt])
+  @@index([creatorId, status, createdAt])
+  @@index([mediaAssetId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  authorId  String
+  videoId   String?
+  reelId    String?
+  body      String
+  createdAt DateTime @default(now())
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  reel      Reel?    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@index([videoId, createdAt])
+  @@index([reelId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String?
+  reelId    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  reel      Reel?    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@unique([userId, reelId])
+  @@index([videoId])
+  @@index([reelId])
+}
+
+model FeedView {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String?
+  reelId    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  reel      Reel?    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@index([userId, videoId, createdAt])
+  @@index([userId, reelId, createdAt])
+  @@index([videoId, createdAt])
+  @@index([reelId, createdAt])
+}
+
+model CreatorLike {
+  id        String   @id @default(cuid())
+  userId    String
+  creatorId String
+  createdAt DateTime @default(now())
+  user      User     @relation("CreatorLikeUser", fields: [userId], references: [id], onDelete: Cascade)
+  creator   User     @relation("CreatorLikedCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, creatorId])
+  @@index([creatorId])
+}
+
+model Dislike {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String?
+  reelId    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  reel      Reel?    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@unique([userId, reelId])
+  @@index([videoId])
+  @@index([reelId])
+}
+
+model Share {
+  id        String   @id @default(cuid())
+  userId    String
+  videoId   String?
+  reelId    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video     Video?   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  reel      Reel?    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([reelId])
+  @@index([userId])
+}
+
+model CreatorShare {
+  id        String   @id @default(cuid())
+  userId    String
+  creatorId String
+  createdAt DateTime @default(now())
+  user      User     @relation("CreatorShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  creator   User     @relation("CreatorSharedCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([userId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId, createdAt])
+  @@index([followerId, createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+}
+
+model SubscriptionPlan {
+  id            String             @id @default(cuid())
+  name          String
+  description   String?
+  priceCents    Int
+  currency      String             @default("INR")
+  durationDays  Int
+  revenueCatOfferingId String?
+  revenueCatPackageId String?
+  revenueCatEntitlementId String?
+  isActive      Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  subscriptions UserSubscription[]
+
+  @@index([isActive, priceCents])
+}
+
+model UserSubscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  planId                 String
+  status                 SubscriptionStatus @default(ACTIVE)
+  provider               PaymentProvider    @default(REVENUECAT)
+  externalSubscriptionId String?
+  externalProductId      String?
+  latestEventAt          DateTime?
+  startsAt               DateTime           @default(now())
+  expiresAt              DateTime
+  canceledAt             DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                   SubscriptionPlan   @relation(fields: [planId], references: [id])
+
+  @@index([userId, status, expiresAt])
+  @@index([status, expiresAt])
+  @@index([provider, externalSubscriptionId])
+  @@index([externalProductId])
+  @@index([latestEventAt])
+}
+
+model PaymentEvent {
+  id              String          @id @default(cuid())
+  provider        PaymentProvider
+  eventId         String
+  eventType       String
+  userId          String?
+  subscriptionId  String?
+  payload         Json
+  processedAt     DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([provider, eventType, createdAt])
+  @@index([userId, createdAt])
+}
+
+model CreatorRequest {
+  id         String               @id @default(cuid())
+  userId     String
+  status     CreatorRequestStatus @default(PENDING)
+  message    String?
+  reviewedAt DateTime?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model LiveRoom {
+  id                 String                  @id @default(cuid())
+  hostId             String
+  title              String
+  status             LiveRoomStatus          @default(SCHEDULED)
+  commentsOn         Boolean                 @default(true)
+  reactionsOn        Boolean                 @default(true)
+  recordingOn        Boolean                 @default(false)
+  currentViewerCount Int                     @default(0)
+  peakViewerCount    Int                     @default(0)
+  totalViewerJoins   Int                     @default(0)
+  uniqueViewerCount  Int                     @default(0)
+  startedAt          DateTime?
+  endedAt            DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  host               User                    @relation("LiveHost", fields: [hostId], references: [id], onDelete: Cascade)
+  comments           LiveComment[]
+  reactions          LiveReaction[]
+  recordings         LiveRecording[]
+  blocks             LiveRoomBlock[]
+  viewerSessions     LiveRoomViewerSession[]
+
+  @@index([status, createdAt])
+  @@index([hostId, status, createdAt])
+}
+
+model LiveComment {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  room      LiveRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model LiveReaction {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  room      LiveRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@index([roomId, emoji])
+  @@index([userId, createdAt])
+}
+
+model LiveRoomBlock {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  blockedBy String
+  createdAt DateTime @default(now())
+  room      LiveRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation("LiveRoomBlockedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+model LiveRoomViewerSession {
+  id         String    @id @default(cuid())
+  roomId     String
+  userId     String
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  lastSeenAt DateTime  @default(now())
+  room       LiveRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, leftAt])
+  @@index([roomId, userId])
+  @@index([roomId, lastSeenAt])
+  @@index([userId, joinedAt])
+}
+
+model LiveRecording {
+  id           String        @id @default(cuid())
+  roomId       String
+  mediaAssetId String?
+  egressId     String?       @unique
+  objectKey    String?
+  publicUrl    String?
+  status       PublishStatus @default(PROCESSING)
+  errorMessage String?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  room         LiveRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset?   @relation(fields: [mediaAssetId], references: [id])
+  processingJobs MediaProcessingJob[]
+
+  @@index([roomId, status])
+}
+
+model Report {
+  id            String           @id @default(cuid())
+  reporterId    String
+  subjectUserId String?
+  targetType    ReportTargetType
+  targetId      String
+  reason        String
+  status        ReportStatus     @default(OPEN)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  reporter      User             @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  subjectUser   User?            @relation("ReportSubjectUser", fields: [subjectUserId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId, createdAt])
+  @@index([subjectUserId, createdAt])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  target    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  admin     User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([target])
+  @@index([createdAt])
+}
