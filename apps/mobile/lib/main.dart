@@ -156,7 +156,7 @@ class _NimbarkAppState extends State<NimbarkApp> {
 
   ThemeData _buildTheme(Brightness brightness) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF2F6B4F),
+      seedColor: const Color(0xFFE53935),
       brightness: brightness,
     );
 
@@ -216,9 +216,10 @@ class _NimbarkAppState extends State<NimbarkApp> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colorScheme.surfaceContainerLowest,
-        indicatorColor: colorScheme.secondaryContainer,
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        backgroundColor: colorScheme.surface,
+        indicatorColor: colorScheme.primaryContainer,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        height: 72,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
@@ -485,15 +486,15 @@ class _AppShellState extends State<AppShell> {
         onDestinationSelected: (index) => setState(() => currentIndex = index),
         destinations: [
           const NavigationDestination(
-              icon: Icon(Icons.play_circle_outline), label: 'Feed'),
+              icon: Icon(Icons.home_outlined), label: 'Home'),
           const NavigationDestination(
-              icon: Icon(Icons.add_box_outlined), label: 'Upload'),
+              icon: Icon(Icons.add_circle_outline), label: 'Create'),
           const NavigationDestination(icon: Icon(Icons.sensors), label: 'Live'),
           NavigationDestination(
               icon: _NotificationNavIcon(count: _unreadNotifications),
-              label: 'Notifications'),
+              label: 'Inbox'),
           const NavigationDestination(
-              icon: Icon(Icons.person_outline), label: 'Profile'),
+              icon: Icon(Icons.person_outline), label: 'You'),
         ],
       ),
     );
@@ -804,7 +805,25 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Feed'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 28,
+              width: 38,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.play_arrow,
+                color: Theme.of(context).colorScheme.onPrimary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text('Nimbark'),
+          ],
+        ),
         actions: [
           if (widget.session.user.role == 'CREATOR' ||
               widget.session.user.role == 'ADMIN')
@@ -822,43 +841,33 @@ class _FeedPageState extends State<FeedPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: _PageIntro(
-              title: _feedType == FeedItemType.video
-                  ? 'Watch videos'
-                  : 'Catch reels',
-              subtitle:
-                  'Discover creators, follow profiles, and react to fresh posts.',
-              icon: _feedType == FeedItemType.video
-                  ? Icons.play_circle_outline
-                  : Icons.video_library_outlined,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: TextField(
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
-                hintText: 'Search creators, videos, reels',
+                hintText: 'Search',
               ),
               onChanged: _setSearchQuery,
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: SegmentedButton<FeedItemType>(
-              segments: const [
-                ButtonSegment(
-                    value: FeedItemType.video,
-                    label: Text('Videos'),
-                    icon: Icon(Icons.play_circle_outline)),
-                ButtonSegment(
-                    value: FeedItemType.reel,
-                    label: Text('Reels'),
-                    icon: Icon(Icons.video_library_outlined)),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: Row(
+              children: [
+                ChoiceChip(
+                  selected: _feedType == FeedItemType.video,
+                  label: const Text('Videos'),
+                  avatar: const Icon(Icons.play_circle_outline, size: 18),
+                  onSelected: (_) => _setFeedType(FeedItemType.video),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  selected: _feedType == FeedItemType.reel,
+                  label: const Text('Shorts'),
+                  avatar: const Icon(Icons.video_library_outlined, size: 18),
+                  onSelected: (_) => _setFeedType(FeedItemType.reel),
+                ),
               ],
-              selected: {_feedType},
-              onSelectionChanged: (selection) => _setFeedType(selection.first),
             ),
           ),
           Expanded(
@@ -899,14 +908,14 @@ class _FeedPageState extends State<FeedPage> {
                       return RefreshIndicator(
                         onRefresh: _refreshFeed,
                         child: ListView.separated(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
                           itemBuilder: (context, index) => _FeedItemCard(
                             item: items[index],
                             session: widget.session,
                             feedApi: _feedApi,
                           ),
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 18),
                           itemCount: items.length,
                         ),
                       );
@@ -3431,13 +3440,20 @@ class _FeedItemCardState extends State<_FeedItemCard>
 
     return Card(
       key: _cardKey,
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _FeedVideoPlayer(
+            url: item.mediaUrl,
+            thumbnailUrl: item.thumbnailUrl,
+            onPlayingChanged: _handlePlayingChanged,
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 InkWell(
                   borderRadius: BorderRadius.circular(8),
@@ -3456,32 +3472,39 @@ class _FeedItemCardState extends State<_FeedItemCard>
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: _openCreatorProfile,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '@${item.creatorUsername}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w900),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            item.type == FeedItemType.video ? 'Video' : 'Reel',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: colorScheme.onSurfaceVariant),
-                          ),
-                        ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: _openDetail,
+                        child: Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '@${item.creatorUsername} • $_viewCount views',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                      if (item.subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 PopupMenuButton<String>(
@@ -3506,39 +3529,11 @@ class _FeedItemCardState extends State<_FeedItemCard>
               ],
             ),
           ),
-          _FeedVideoPlayer(
-            url: item.mediaUrl,
-            thumbnailUrl: item.thumbnailUrl,
-            onPlayingChanged: _handlePlayingChanged,
-          ),
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: _openDetail,
-                  child: Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                if (item.subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    item.subtitle,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: colorScheme.onSurfaceVariant),
-                  ),
-                ],
-                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
