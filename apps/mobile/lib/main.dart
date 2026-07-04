@@ -834,7 +834,7 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             /*Container(
@@ -850,7 +850,7 @@ class _FeedPageState extends State<FeedPage> {
               ),
             ),
             const SizedBox(width: 8),*/
-            const Text('Nimbark Streaming'),
+            Text('Nimbark Streaming'),
           ],
         ),
         actions: [
