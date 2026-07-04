@@ -1003,6 +1003,17 @@ class _UploadPageState extends State<UploadPage> {
   bool get _canCreate =>
       widget.session.user.role == 'CREATOR' ||
       widget.session.user.role == 'ADMIN';
+  int get _activeStep {
+    if (_isPublishing) {
+      return 2;
+    }
+
+    if (_selectedFile != null) {
+      return 1;
+    }
+
+    return 0;
+  }
 
   @override
   void dispose() {
@@ -1249,70 +1260,70 @@ class _UploadPageState extends State<UploadPage> {
     }
 
     final selectedFile = _selectedFile;
+    final canPublish = selectedFile != null && !_isPublishing;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Upload')),
+      appBar: AppBar(title: const Text('Create')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const _PageIntro(
-            title: 'Create a post',
-            subtitle:
-                'Upload videos or short reels with comments and thumbnails.',
-            icon: Icons.cloud_upload_outlined,
+            title: 'Creator studio',
+            subtitle: 'Pick, preview, and publish your next video.',
+            icon: Icons.add_circle_outline,
+          ),
+          const SizedBox(height: 16),
+          _UploadStepHeader(activeStep: _activeStep),
+          const SizedBox(height: 16),
+          _SurfacePanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle(
+                  title: 'Pick',
+                  subtitle: 'Choose the format and select a saved video.',
+                ),
+                const SizedBox(height: 14),
+                _UploadFormatSelector(
+                  postType: _postType,
+                  onChanged: _isPublishing
+                      ? null
+                      : (type) => setState(() {
+                            _postType = type;
+                            if (_postType == FeedItemType.reel &&
+                                _selectedDuration != null &&
+                                _selectedDuration! > _maxReelDuration) {
+                              _message = 'Reels must be 30 seconds or shorter.';
+                            } else if (_message ==
+                                'Reels must be 30 seconds or shorter.') {
+                              _message = null;
+                            }
+                          }),
+                ),
+                const SizedBox(height: 14),
+                _UploadVideoPreview(
+                  file: selectedFile,
+                  duration: _selectedDuration,
+                  postType: _postType,
+                  onPick: _isPublishing ? null : _pickVideo,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           _SurfacePanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SegmentedButton<FeedItemType>(
-                  segments: const [
-                    ButtonSegment(
-                        value: FeedItemType.video,
-                        label: Text('Video'),
-                        icon: Icon(Icons.play_circle_outline)),
-                    ButtonSegment(
-                        value: FeedItemType.reel,
-                        label: Text('Reel'),
-                        icon: Icon(Icons.video_library_outlined)),
-                  ],
-                  selected: {_postType},
-                  onSelectionChanged: (selection) => setState(() {
-                    _postType = selection.first;
-                    if (_postType == FeedItemType.reel &&
-                        _selectedDuration != null &&
-                        _selectedDuration! > _maxReelDuration) {
-                      _message = 'Reels must be 30 seconds or shorter.';
-                    } else if (_message ==
-                        'Reels must be 30 seconds or shorter.') {
-                      _message = null;
-                    }
-                  }),
+                const _SectionTitle(
+                  title: 'Details',
+                  subtitle: 'Add the information viewers see before tapping.',
                 ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: _isPublishing ? null : _pickVideo,
-                  icon: const Icon(Icons.folder_open),
-                  label: Text(selectedFile == null
-                      ? 'Pick saved video'
-                      : selectedFile.path.split('/').last),
-                ),
-                if (_selectedDuration != null) ...[
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _MetaPill(
-                      icon: Icons.timer_outlined,
-                      label:
-                          'Duration ${_formatUploadDuration(_selectedDuration!)}',
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 if (_postType == FeedItemType.video)
                   TextField(
                     controller: _titleController,
+                    enabled: !_isPublishing,
                     decoration: const InputDecoration(
                       labelText: 'Title',
                       prefixIcon: Icon(Icons.title),
@@ -1322,6 +1333,7 @@ class _UploadPageState extends State<UploadPage> {
                 if (_postType == FeedItemType.video) const SizedBox(height: 12),
                 TextField(
                   controller: _descriptionController,
+                  enabled: !_isPublishing,
                   decoration: InputDecoration(
                     labelText: _postType == FeedItemType.video
                         ? 'Description'
@@ -1332,21 +1344,34 @@ class _UploadPageState extends State<UploadPage> {
                   maxLines: 5,
                 ),
                 const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _commentsEnabled,
-                  onChanged: _isPublishing
-                      ? null
-                      : (value) => setState(() => _commentsEnabled = value),
-                  title: const Text('Allow comments'),
-                  subtitle: Text(_commentsEnabled
-                      ? 'Users can comment on this post.'
-                      : 'Comments will be disabled.'),
+                _UploadCommentsToggle(
+                  enabled: _commentsEnabled,
+                  locked: _isPublishing,
+                  onChanged: (value) =>
+                      setState(() => _commentsEnabled = value),
                 ),
-                const SizedBox(height: 18),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _SurfacePanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle(
+                  title: 'Publish',
+                  subtitle: 'Upload to storage, then wait for processing.',
+                ),
+                const SizedBox(height: 14),
+                _UploadPublishSummary(
+                  file: selectedFile,
+                  duration: _selectedDuration,
+                  postType: _postType,
+                  commentsEnabled: _commentsEnabled,
+                ),
+                const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed:
-                      selectedFile == null || _isPublishing ? null : _publish,
+                  onPressed: canPublish ? _publish : null,
                   icon: _isPublishing
                       ? const SizedBox(
                           width: 18,
@@ -1360,19 +1385,379 @@ class _UploadPageState extends State<UploadPage> {
           ),
           if (_message != null) ...[
             const SizedBox(height: 12),
-            _SurfacePanel(
-              child: Text(
-                _message!,
-                style: TextStyle(
-                  color: _message == 'Published successfully.' ||
-                          _message == 'Upload queued for processing.'
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            _UploadStatusCard(
+              message: _message!,
+              isPublishing: _isPublishing,
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _UploadStepHeader extends StatelessWidget {
+  const _UploadStepHeader({required this.activeStep});
+
+  final int activeStep;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['Pick', 'Details', 'Publish'];
+
+    return Row(
+      children: [
+        for (var index = 0; index < labels.length; index++) ...[
+          Expanded(
+            child: _UploadStepPill(
+              label: labels[index],
+              index: index + 1,
+              isActive: activeStep == index,
+              isComplete: activeStep > index,
+            ),
+          ),
+          if (index != labels.length - 1) const SizedBox(width: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _UploadStepPill extends StatelessWidget {
+  const _UploadStepPill({
+    required this.label,
+    required this.index,
+    required this.isActive,
+    required this.isComplete,
+  });
+
+  final String label;
+  final int index;
+  final bool isActive;
+  final bool isComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final activeColor = isActive || isComplete
+        ? colorScheme.primary
+        : colorScheme.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: isActive ? colorScheme.primaryContainer : colorScheme.surface,
+        border: Border.all(
+          color: isActive ? colorScheme.primary : colorScheme.outlineVariant,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 11,
+            backgroundColor: isComplete || isActive
+                ? colorScheme.primary
+                : colorScheme.surfaceContainerHighest,
+            child: isComplete
+                ? Icon(Icons.check, size: 14, color: colorScheme.onPrimary)
+                : Text(
+                    '$index',
+                    style: TextStyle(
+                      color: isActive
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: activeColor,
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UploadFormatSelector extends StatelessWidget {
+  const _UploadFormatSelector({
+    required this.postType,
+    required this.onChanged,
+  });
+
+  final FeedItemType postType;
+  final ValueChanged<FeedItemType>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<FeedItemType>(
+      segments: const [
+        ButtonSegment(
+            value: FeedItemType.video,
+            label: Text('Video'),
+            icon: Icon(Icons.play_circle_outline)),
+        ButtonSegment(
+            value: FeedItemType.reel,
+            label: Text('Short'),
+            icon: Icon(Icons.video_library_outlined)),
+      ],
+      selected: {postType},
+      onSelectionChanged:
+          onChanged == null ? null : (selection) => onChanged!(selection.first),
+    );
+  }
+}
+
+class _UploadVideoPreview extends StatelessWidget {
+  const _UploadVideoPreview({
+    required this.file,
+    required this.duration,
+    required this.postType,
+    required this.onPick,
+  });
+
+  final File? file;
+  final Duration? duration;
+  final FeedItemType postType;
+  final VoidCallback? onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final selectedFile = file;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onPick,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 172),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: colorScheme.outlineVariant),
+        ),
+        child: selectedFile == null
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.video_call_outlined,
+                      size: 44, color: colorScheme.primary),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Select video file',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    postType == FeedItemType.reel
+                        ? 'Shorts must be 30 seconds or less.'
+                        : 'Choose a video from your device.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        height: 54,
+                        width: 54,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.movie_creation_outlined,
+                            color: colorScheme.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              selectedFile.path.split('/').last,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tap to change video',
+                              style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _MetaPill(
+                        icon: postType == FeedItemType.video
+                            ? Icons.play_circle_outline
+                            : Icons.video_library_outlined,
+                        label:
+                            postType == FeedItemType.video ? 'Video' : 'Short',
+                      ),
+                      if (duration != null)
+                        _MetaPill(
+                          icon: Icons.timer_outlined,
+                          label: _formatUploadDuration(duration!),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _UploadCommentsToggle extends StatelessWidget {
+  const _UploadCommentsToggle({
+    required this.enabled,
+    required this.locked,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final bool locked;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      value: enabled,
+      onChanged: locked ? null : onChanged,
+      title: const Text('Allow comments'),
+      subtitle: Text(enabled
+          ? 'Viewers can comment on this post.'
+          : 'Comments will be disabled.'),
+      secondary: const Icon(Icons.mode_comment_outlined),
+    );
+  }
+}
+
+class _UploadPublishSummary extends StatelessWidget {
+  const _UploadPublishSummary({
+    required this.file,
+    required this.duration,
+    required this.postType,
+    required this.commentsEnabled,
+  });
+
+  final File? file;
+  final Duration? duration;
+  final FeedItemType postType;
+  final bool commentsEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _MetaPill(
+          icon: file == null ? Icons.upload_file_outlined : Icons.check_circle,
+          label: file == null ? 'No file selected' : 'File ready',
+        ),
+        _MetaPill(
+          icon: postType == FeedItemType.video
+              ? Icons.play_circle_outline
+              : Icons.video_library_outlined,
+          label: postType == FeedItemType.video ? 'Video' : 'Short',
+        ),
+        if (duration != null)
+          _MetaPill(
+            icon: Icons.timer_outlined,
+            label: _formatUploadDuration(duration!),
+          ),
+        _MetaPill(
+          icon: commentsEnabled
+              ? Icons.mode_comment_outlined
+              : Icons.comments_disabled_outlined,
+          label: commentsEnabled ? 'Comments on' : 'Comments off',
+        ),
+      ],
+    );
+  }
+}
+
+class _UploadStatusCard extends StatelessWidget {
+  const _UploadStatusCard({
+    required this.message,
+    required this.isPublishing,
+  });
+
+  final String message;
+  final bool isPublishing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isSuccess = message.toLowerCase().contains('successfully') ||
+        message.toLowerCase().contains('appear in the feed soon');
+    final color = isSuccess ? colorScheme.primary : colorScheme.tertiary;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _themeAlpha(color, 0.1),
+        border: Border.all(color: _themeAlpha(color, 0.28)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          if (isPublishing)
+            SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+              ),
+            )
+          else
+            Icon(
+              isSuccess ? Icons.check_circle_outline : Icons.info_outline,
+              color: color,
+            ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
         ],
       ),
     );
