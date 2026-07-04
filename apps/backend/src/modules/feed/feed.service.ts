@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { MediaProcessingService } from '../media-processing/media-processing.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StorageService } from '../storage/storage.service';
 
 type FeedType = 'video' | 'reel';
 
@@ -47,25 +48,30 @@ export class FeedService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mediaProcessing: MediaProcessingService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly storage?: StorageService
   ) {}
 
-  videos() {
-    return this.prisma.video.findMany({
+  async videos() {
+    const videos = await this.prisma.video.findMany({
       where: { status: PublishStatus.PUBLISHED },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: this.feedInclude()
     });
+
+    return this.normalizeFeedItems(videos);
   }
 
-  reels() {
-    return this.prisma.reel.findMany({
+  async reels() {
+    const reels = await this.prisma.reel.findMany({
       where: { status: PublishStatus.PUBLISHED },
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: this.feedInclude()
     });
+
+    return this.normalizeFeedItems(reels);
   }
 
   async publishVideo(input: PublishVideoInput, user?: AuthenticatedUser) {
@@ -107,7 +113,7 @@ export class FeedService {
 
     await this.mediaProcessing.enqueueVideo(video.id, mediaAsset.id);
 
-    return video;
+    return this.normalizeFeedItem(video);
   }
 
   async publishReel(input: PublishReelInput, user?: AuthenticatedUser) {
@@ -143,10 +149,10 @@ export class FeedService {
 
     await this.mediaProcessing.enqueueReel(reel.id, mediaAsset.id);
 
-    return reel;
+    return this.normalizeFeedItem(reel);
   }
 
-  search(query: string) {
+  async search(query: string) {
     const term = query.trim();
 
     if (term.length < 2) {
@@ -162,7 +168,7 @@ export class FeedService {
       mode: Prisma.QueryMode.insensitive
     };
 
-    return Promise.all([
+    const [creators, videos, reels] = await Promise.all([
       this.prisma.user.findMany({
         where: {
           role: UserRole.CREATOR,
@@ -204,7 +210,13 @@ export class FeedService {
         take: 12,
         include: this.feedInclude()
       })
-    ]).then(([creators, videos, reels]) => ({ creators, videos, reels }));
+    ]);
+
+    return {
+      creators,
+      videos: await this.normalizeFeedItems(videos),
+      reels: await this.normalizeFeedItems(reels)
+    };
   }
 
   async creatorProfile(id: string) {
@@ -242,8 +254,8 @@ export class FeedService {
 
     return {
       creator,
-      videos,
-      reels
+      videos: await this.normalizeFeedItems(videos),
+      reels: await this.normalizeFeedItems(reels)
     };
   }
 
@@ -268,7 +280,7 @@ export class FeedService {
       throw new NotFoundException('Post is not available');
     }
 
-    return item;
+    return this.normalizeFeedItem(item);
   }
 
   async incrementView(type: FeedType, id: string, user?: AuthenticatedUser) {
@@ -610,6 +622,38 @@ export class FeedService {
           shares: true
         }
       }
+    };
+  }
+
+  private async normalizeFeedItems<T extends { mediaAsset: { publicUrl: string | null; objectKey: string }; thumbnail?: { publicUrl: string | null; objectKey: string } | null }>(
+    items: T[]
+  ) {
+    return Promise.all(items.map((item) => this.normalizeFeedItem(item)));
+  }
+
+  private async normalizeFeedItem<T extends { mediaAsset: { publicUrl: string | null; objectKey: string }; thumbnail?: { publicUrl: string | null; objectKey: string } | null }>(
+    item: T
+  ) {
+    if (!this.storage) {
+      return item;
+    }
+
+    const settings = await this.storage.activeSettings();
+    const mediaAsset = {
+      ...item.mediaAsset,
+      publicUrl: item.mediaAsset.publicUrl ?? this.storage.publicUrl(settings, item.mediaAsset.objectKey)
+    };
+    const thumbnail = item.thumbnail
+      ? {
+          ...item.thumbnail,
+          publicUrl: item.thumbnail.publicUrl ?? this.storage.publicUrl(settings, item.thumbnail.objectKey)
+        }
+      : item.thumbnail;
+
+    return {
+      ...item,
+      mediaAsset,
+      thumbnail
     };
   }
 

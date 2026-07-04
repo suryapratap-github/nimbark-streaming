@@ -3563,10 +3563,12 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   late final VideoPlayerController _controller;
   late final Future<void> _initializeFuture;
   bool _lastPlayingState = false;
+  bool _hasStartedPlayback = false;
 
   @override
   void initState() {
     super.initState();
+    print(widget.url);
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     _initializeFuture = _controller.initialize();
     _controller.setLooping(true);
@@ -3617,20 +3619,36 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
         return GestureDetector(
           onTap: () {
             setState(() {
-              _controller.value.isPlaying
-                  ? _controller.pause()
-                  : _controller.play();
+              if (_controller.value.isPlaying) {
+                _controller.pause();
+              } else {
+                _hasStartedPlayback = true;
+                _controller.play();
+              }
             });
           },
           child: Stack(
             alignment: Alignment.center,
             children: [
-              AspectRatio(
-                aspectRatio: _controller.value.aspectRatio == 0
-                    ? 16 / 9
-                    : _controller.value.aspectRatio,
-                child: VideoPlayer(_controller),
-              ),
+              if (!_hasStartedPlayback &&
+                  widget.thumbnailUrl != null &&
+                  widget.thumbnailUrl!.isNotEmpty)
+                AspectRatio(
+                  aspectRatio: _controller.value.aspectRatio == 0
+                      ? 16 / 9
+                      : _controller.value.aspectRatio,
+                  child: _VideoThumbnailPlaceholder(
+                    thumbnailUrl: widget.thumbnailUrl,
+                    child: const SizedBox.shrink(),
+                  ),
+                )
+              else
+                AspectRatio(
+                  aspectRatio: _controller.value.aspectRatio == 0
+                      ? 16 / 9
+                      : _controller.value.aspectRatio,
+                  child: VideoPlayer(_controller),
+                ),
               if (!_controller.value.isPlaying)
                 DecoratedBox(
                   decoration: BoxDecoration(

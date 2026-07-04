@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { StorageProvider } from '@prisma/client';
 import { GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -21,7 +22,10 @@ export type UpdateStorageSettingsInput = {
 
 @Injectable()
 export class StorageService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config?: ConfigService
+  ) {}
 
   async settings() {
     const settings = await this.ensureSettings();
@@ -326,17 +330,41 @@ export class StorageService {
   }
 
   private async ensureSettings() {
+    const envSettings = this.envStorageSettings();
+
     return this.prisma.storageSetting.upsert({
       where: { id: 'default' },
       create: {
         id: 'default',
-        provider: StorageProvider.LOCAL,
-        localBasePath: 'storage/media',
-        localPublicUrl: '/api/media/local',
-        videoCompressionEnabled: false
+        ...envSettings
       },
-      update: {}
+      update: envSettings
     });
+  }
+
+  private envStorageSettings() {
+    const r2Bucket = this.cleanNullable(this.config?.get<string>('CLOUDFLARE_R2_BUCKET'));
+    const r2Endpoint = this.cleanNullable(this.config?.get<string>('CLOUDFLARE_R2_ENDPOINT'));
+    const r2AccessKeyId = this.cleanNullable(this.config?.get<string>('CLOUDFLARE_R2_ACCESS_KEY_ID'));
+    const r2SecretKey = this.cleanNullable(this.config?.get<string>('CLOUDFLARE_R2_SECRET_ACCESS_KEY'));
+    const r2PublicUrl = this.cleanNullable(this.config?.get<string>('CLOUDFLARE_PUBLIC_MEDIA_URL'));
+    const hasCompleteR2Settings = Boolean(r2Bucket && r2Endpoint && r2AccessKeyId && r2SecretKey && r2PublicUrl);
+    const configuredProvider = this.config?.get<string>('STORAGE_PROVIDER')?.toUpperCase();
+    const provider =
+      configuredProvider === StorageProvider.R2 || hasCompleteR2Settings ? StorageProvider.R2 : StorageProvider.LOCAL;
+
+    return {
+      provider,
+      localBasePath: this.cleanPath(this.config?.get<string>('LOCAL_STORAGE_PATH')) ?? 'storage/media',
+      localPublicUrl: this.cleanPath(this.config?.get<string>('LOCAL_PUBLIC_MEDIA_URL')) ?? '/api/media/local',
+      videoCompressionEnabled: this.config?.get<string>('VIDEO_COMPRESSION_ENABLED') === 'true',
+      r2Bucket,
+      r2Endpoint,
+      r2Region: this.cleanNullable(this.config?.get<string>('CLOUDFLARE_R2_REGION')) ?? 'auto',
+      r2AccessKeyId,
+      r2SecretKey,
+      r2PublicUrl
+    };
   }
 
   private ensureR2Configured(settings: Awaited<ReturnType<StorageService['ensureSettings']>>) {
