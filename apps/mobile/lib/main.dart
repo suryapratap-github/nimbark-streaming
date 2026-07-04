@@ -162,23 +162,39 @@ class _NimbarkAppState extends State<NimbarkApp> {
 
     return ThemeData(
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surfaceContainerLowest,
+      scaffoldBackgroundColor: colorScheme.surface,
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: colorScheme.surfaceContainerLowest,
+        backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
-        surfaceTintColor: colorScheme.surfaceTint,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         titleTextStyle: TextStyle(
           color: colorScheme.onSurface,
-          fontSize: 22,
+          fontSize: 24,
           fontWeight: FontWeight.w900,
         ),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(),
       ),
       badgeTheme: BadgeThemeData(backgroundColor: colorScheme.primary),
       chipTheme: ChipThemeData(
         backgroundColor: colorScheme.surfaceContainerHighest,
-        selectedColor: colorScheme.secondaryContainer,
-        side: BorderSide(color: colorScheme.outlineVariant),
+        selectedColor: colorScheme.onSurface,
+        labelStyle: TextStyle(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w800,
+        ),
+        secondaryLabelStyle: TextStyle(
+          color: colorScheme.surface,
+          fontWeight: FontWeight.w900,
+        ),
+        side: BorderSide.none,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       dividerTheme: DividerThemeData(color: colorScheme.outlineVariant),
@@ -679,8 +695,8 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _PostActionButton extends StatelessWidget {
-  const _PostActionButton({
+class _FeedActionButton extends StatelessWidget {
+  const _FeedActionButton({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -695,36 +711,31 @@ class _PostActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final foreground =
+        isActive ? colorScheme.primary : colorScheme.onSurfaceVariant;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? colorScheme.primaryContainer
-              : colorScheme.surfaceContainerHighest,
-          border: Border.all(color: colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isActive ? colorScheme.primary : null,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: isActive ? colorScheme.primary : null,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-          ],
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: foreground, size: 22),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: foreground,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -745,14 +756,22 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   final _feedApi = FeedApi(apiBaseUrl: AppConfig.apiBaseUrl);
+  final _searchController = TextEditingController();
   late Future<List<FeedItem>> _feedFuture;
   Future<FeedSearchResult>? _searchFuture;
   FeedItemType _feedType = FeedItemType.video;
+  bool _searchOpen = false;
 
   @override
   void initState() {
     super.initState();
     _feedFuture = _loadFeed();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<List<FeedItem>> _loadFeed() {
@@ -801,6 +820,16 @@ class _FeedPageState extends State<FeedPage> {
     });
   }
 
+  void _toggleSearch() {
+    setState(() {
+      _searchOpen = !_searchOpen;
+      if (!_searchOpen) {
+        _searchController.clear();
+        _searchFuture = null;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -808,7 +837,7 @@ class _FeedPageState extends State<FeedPage> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            /*Container(
               height: 28,
               width: 38,
               decoration: BoxDecoration(
@@ -820,8 +849,8 @@ class _FeedPageState extends State<FeedPage> {
                 color: Theme.of(context).colorScheme.onPrimary,
               ),
             ),
-            const SizedBox(width: 8),
-            const Text('Nimbark'),
+            const SizedBox(width: 8),*/
+            const Text('Nimbark Streaming'),
           ],
         ),
         actions: [
@@ -833,6 +862,11 @@ class _FeedPageState extends State<FeedPage> {
               tooltip: 'Creator dashboard',
             ),
           IconButton(
+            onPressed: _toggleSearch,
+            icon: Icon(_searchOpen ? Icons.close : Icons.search),
+            tooltip: 'Search',
+          ),
+          IconButton(
             onPressed: _refreshFeed,
             icon: const Icon(Icons.refresh),
           ),
@@ -840,34 +874,40 @@ class _FeedPageState extends State<FeedPage> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search',
+          if (_searchOpen)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search Nimbark',
+                ),
+                onChanged: _setSearchQuery,
               ),
-              onChanged: _setSearchQuery,
             ),
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: Row(
-              children: [
-                ChoiceChip(
-                  selected: _feedType == FeedItemType.video,
-                  label: const Text('Videos'),
-                  avatar: const Icon(Icons.play_circle_outline, size: 18),
-                  onSelected: (_) => _setFeedType(FeedItemType.video),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  selected: _feedType == FeedItemType.reel,
-                  label: const Text('Shorts'),
-                  avatar: const Icon(Icons.video_library_outlined, size: 18),
-                  onSelected: (_) => _setFeedType(FeedItemType.reel),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  ChoiceChip(
+                    selected: _feedType == FeedItemType.video,
+                    label: const Text('Videos'),
+                    avatar: const Icon(Icons.play_circle_outline, size: 18),
+                    onSelected: (_) => _setFeedType(FeedItemType.video),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    selected: _feedType == FeedItemType.reel,
+                    label: const Text('Shorts'),
+                    avatar: const Icon(Icons.video_library_outlined, size: 18),
+                    onSelected: (_) => _setFeedType(FeedItemType.reel),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -3438,10 +3478,14 @@ class _FeedItemCardState extends State<_FeedItemCard>
     final canDelete = item.creatorId == widget.session.user.id;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Card(
+    return DecoratedBox(
       key: _cardKey,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3531,53 +3575,30 @@ class _FeedItemCardState extends State<_FeedItemCard>
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _MetaPill(
-                      icon: Icons.visibility_outlined,
-                      label: '$_viewCount views',
-                    ),
-                    _MetaPill(
-                      icon: Icons.mode_comment_outlined,
-                      label: '$_commentCount comments',
-                    ),
-                  ],
+                _FeedActionButton(
+                  icon: _liked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                  label: '$_likeCount',
+                  isActive: _liked,
+                  onTap: _toggleLike,
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _PostActionButton(
-                      icon: _liked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                      label: '$_likeCount',
-                      isActive: _liked,
-                      onTap: _toggleLike,
-                    ),
-                    _PostActionButton(
-                      icon: _disliked
-                          ? Icons.thumb_down
-                          : Icons.thumb_down_outlined,
-                      label: '$_dislikeCount',
-                      isActive: _disliked,
-                      onTap: _toggleDislike,
-                    ),
-                    _PostActionButton(
-                      icon: Icons.mode_comment_outlined,
-                      label: 'Comment',
-                      onTap: _showComments,
-                    ),
-                    _PostActionButton(
-                      icon: Icons.ios_share,
-                      label: 'Share',
-                      onTap: _share,
-                    ),
-                  ],
+                _FeedActionButton(
+                  icon:
+                      _disliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+                  label: '$_dislikeCount',
+                  isActive: _disliked,
+                  onTap: _toggleDislike,
+                ),
+                _FeedActionButton(
+                  icon: Icons.mode_comment_outlined,
+                  label: '$_commentCount',
+                  onTap: _showComments,
+                ),
+                _FeedActionButton(
+                  icon: Icons.ios_share,
+                  label: 'Share',
+                  onTap: _share,
                 ),
               ],
             ),
