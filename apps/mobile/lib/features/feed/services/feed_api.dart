@@ -113,7 +113,9 @@ class FeedApi {
       );
 
       if (putResponse.statusCode < 200 || putResponse.statusCode >= 300) {
-        throw const ApiException('Unable to upload media to R2');
+        throw ApiException(
+          'Unable to upload media to R2 (${putResponse.statusCode}): ${_responseMessage(putResponse)}',
+        );
       }
 
       return LocalUploadResult(
@@ -167,7 +169,7 @@ class FeedApi {
         'commentsEnabled': commentsEnabled,
       }),
     );
-    final data = _decode(response);
+    final data = _decode(response, fallbackMessage: 'Unable to publish video');
     return FeedItem.fromJson(data, FeedItemType.video, apiBaseUrl);
   }
 
@@ -190,7 +192,7 @@ class FeedApi {
         'commentsEnabled': commentsEnabled,
       }),
     );
-    final data = _decode(response);
+    final data = _decode(response, fallbackMessage: 'Unable to publish reel');
     return FeedItem.fromJson(data, FeedItemType.reel, apiBaseUrl);
   }
 
@@ -376,27 +378,32 @@ class FeedApi {
     };
   }
 
-  Map<String, dynamic> _decode(http.Response response) {
-    final data = response.body.isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(response.body) as Map<String, dynamic>;
+  Map<String, dynamic> _decode(
+    http.Response response, {
+    String fallbackMessage = 'Request failed',
+  }) {
+    final decoded = response.body.isEmpty ? null : _tryDecode(response.body);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(data['message'] as String? ?? 'Request failed');
+      throw ApiException(
+        '$fallbackMessage (${response.statusCode}): ${_decodedMessage(decoded) ?? _responseMessage(response)}',
+      );
     }
 
-    return data;
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+
+    throw const ApiException('Unexpected response from server');
   }
 
   List<Map<String, dynamic>> _decodeList(http.Response response) {
-    final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    final decoded = response.body.isEmpty ? null : _tryDecode(response.body);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      if (decoded is Map<String, dynamic>) {
-        throw ApiException(decoded['message'] as String? ?? 'Request failed');
-      }
-
-      throw const ApiException('Request failed');
+      throw ApiException(
+        'Request failed (${response.statusCode}): ${_decodedMessage(decoded) ?? _responseMessage(response)}',
+      );
     }
 
     if (decoded is List<dynamic>) {
@@ -404,6 +411,45 @@ class FeedApi {
     }
 
     throw const ApiException('Unexpected response from server');
+  }
+
+  Object? _tryDecode(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _decodedMessage(Object? decoded) {
+    if (decoded is Map<String, dynamic>) {
+      final message = decoded['message'];
+
+      if (message is String && message.trim().isNotEmpty) {
+        return message;
+      }
+
+      if (message is List<dynamic> && message.isNotEmpty) {
+        return message.join(', ');
+      }
+
+      final error = decoded['error'];
+      if (error is String && error.trim().isNotEmpty) {
+        return error;
+      }
+    }
+
+    return null;
+  }
+
+  String _responseMessage(http.Response response) {
+    final body = response.body.trim();
+
+    if (body.isEmpty) {
+      return response.reasonPhrase ?? 'No response body';
+    }
+
+    return body.length > 240 ? '${body.substring(0, 240)}...' : body;
   }
 }
 
