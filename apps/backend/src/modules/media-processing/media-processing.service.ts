@@ -77,13 +77,17 @@ export class MediaProcessingService implements OnModuleInit {
     mediaAssetId: string,
     target: { videoId?: string; reelId?: string; liveRecordingId?: string }
   ) {
-    return this.prisma.mediaProcessingJob.create({
+    const job = await this.prisma.mediaProcessingJob.create({
       data: {
         type,
         mediaAssetId,
         ...target
       }
     });
+
+    void this.processNextQueuedJob();
+
+    return job;
   }
 
   private async claimNextJob() {
