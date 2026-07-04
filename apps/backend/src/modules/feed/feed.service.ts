@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { MediaType, Prisma, PublishStatus, ReportTargetType, UserRole } from '@prisma/client';
+import { MediaType, Prisma, PublishStatus, ReportTargetType, StorageProvider, UserRole } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { MediaProcessingService } from '../media-processing/media-processing.service';
@@ -641,12 +641,12 @@ export class FeedService {
     const settings = await this.storage.activeSettings();
     const mediaAsset = {
       ...item.mediaAsset,
-      publicUrl: item.mediaAsset.publicUrl ?? this.storage.publicUrl(settings, item.mediaAsset.objectKey)
+      publicUrl: this.feedPublicUrl(settings, item.mediaAsset.publicUrl, item.mediaAsset.objectKey)
     };
     const thumbnail = item.thumbnail
       ? {
           ...item.thumbnail,
-          publicUrl: item.thumbnail.publicUrl ?? this.storage.publicUrl(settings, item.thumbnail.objectKey)
+          publicUrl: this.feedPublicUrl(settings, item.thumbnail.publicUrl, item.thumbnail.objectKey)
         }
       : item.thumbnail;
 
@@ -655,6 +655,30 @@ export class FeedService {
       mediaAsset,
       thumbnail
     };
+  }
+
+  private feedPublicUrl(
+    settings: Awaited<ReturnType<StorageService['activeSettings']>>,
+    currentUrl: string | null,
+    objectKey: string
+  ) {
+    if (settings.provider === StorageProvider.R2 && this.isLocalMediaUrl(currentUrl)) {
+      return this.storage?.publicUrl(settings, objectKey) ?? currentUrl;
+    }
+
+    return currentUrl ?? this.storage?.publicUrl(settings, objectKey) ?? null;
+  }
+
+  private isLocalMediaUrl(url: string | null) {
+    if (!url) {
+      return true;
+    }
+
+    try {
+      return new URL(url).pathname.startsWith('/api/media/local/');
+    } catch {
+      return url.startsWith('/api/media/local/');
+    }
   }
 
   private async createThumbnailAsset(input: PublishMediaInput | undefined, ownerId: string) {
