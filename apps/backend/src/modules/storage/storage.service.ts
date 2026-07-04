@@ -3,8 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { StorageProvider } from '@prisma/client';
 import { GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createReadStream, createWriteStream } from 'fs';
 import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { PrismaService } from '../../database/prisma.service';
 
 export type UpdateStorageSettingsInput = {
@@ -193,8 +196,13 @@ export class StorageService {
       throw new BadRequestException('R2 object body is empty');
     }
 
-    const bytes = await object.Body.transformToByteArray();
-    await writeFile(targetPath, Buffer.from(bytes));
+    if (object.Body instanceof Readable) {
+      await pipeline(object.Body, createWriteStream(targetPath));
+    } else {
+      const bytes = await object.Body.transformToByteArray();
+      await writeFile(targetPath, Buffer.from(bytes));
+    }
+
     return targetPath;
   }
 
@@ -206,14 +214,15 @@ export class StorageService {
     }
 
     this.ensureR2Configured(settings);
-    const body = await readFile(sourcePath);
+    const outputStat = await stat(sourcePath);
 
     await this.r2Client(settings).send(
       new PutObjectCommand({
         Bucket: settings.r2Bucket!,
         Key: objectKey,
-        Body: body,
-        ContentType: contentType
+        Body: createReadStream(sourcePath),
+        ContentType: contentType,
+        ContentLength: outputStat.size
       })
     );
 
@@ -221,7 +230,7 @@ export class StorageService {
       objectKey,
       publicUrl: this.publicUrl(settings, objectKey),
       contentType,
-      sizeBytes: body.length
+      sizeBytes: outputStat.size
     };
   }
 

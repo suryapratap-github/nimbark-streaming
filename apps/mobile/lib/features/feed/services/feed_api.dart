@@ -106,11 +106,15 @@ class FeedApi {
         throw const ApiException('R2 upload URL was not returned');
       }
 
-      final putResponse = await _client.put(
+      final putRequest = http.StreamedRequest(
+        'PUT',
         Uri.parse(upload.uploadUrl!),
-        headers: {'Content-Type': contentType},
-        body: await file.readAsBytes(),
-      );
+      )
+        ..headers['Content-Type'] = contentType
+        ..contentLength = await file.length();
+      await file.openRead().pipe(putRequest.sink);
+      final putResponse =
+          await http.Response.fromStream(await _client.send(putRequest));
 
       if (putResponse.statusCode < 200 || putResponse.statusCode >= 300) {
         throw ApiException(
