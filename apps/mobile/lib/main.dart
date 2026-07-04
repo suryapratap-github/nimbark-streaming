@@ -542,13 +542,11 @@ class _PageIntro extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    this.trailing,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -594,10 +592,6 @@ class _PageIntro extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
         ],
       ),
     );
@@ -7202,6 +7196,22 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _openUpload() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UploadPage(session: widget.session),
+      ),
+    );
+  }
+
+  void _openLive() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LivePage(session: widget.session),
+      ),
+    );
+  }
+
   void _showMessage(String message) {
     if (!mounted) {
       return;
@@ -7220,25 +7230,37 @@ class _ProfilePageState extends State<ProfilePage> {
             .first
             .toUpperCase();
 
-    return SafeArea(
-      child: ListView(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('You'),
+        actions: [
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+      body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _PageIntro(
-            title: user.displayName,
-            subtitle: '@${user.username} • ${user.role}',
-            icon: Icons.person_outline,
-            trailing: CircleAvatar(
-              radius: 24,
-              backgroundImage:
-                  user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                      ? NetworkImage(user.avatarUrl!)
-                      : null,
-              child: user.avatarUrl == null || user.avatarUrl!.isEmpty
-                  ? Text(initial)
-                  : null,
-            ),
+          _ChannelHeader(
+            displayName: user.displayName,
+            username: user.username,
+            role: user.role,
+            bio: user.bio,
+            avatarUrl: user.avatarUrl,
+            initial: initial,
           ),
+          const SizedBox(height: 16),
+          _ChannelQuickActions(
+            isCreator: user.role != 'USER',
+            onStudio: _openCreatorDashboard,
+            onUpload: _openUpload,
+            onLive: _openLive,
+          ),
+          const SizedBox(height: 16),
+          const _ChannelTabsPreview(),
           const SizedBox(height: 16),
           _SurfacePanel(
             child: Column(
@@ -7415,6 +7437,256 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ChannelHeader extends StatelessWidget {
+  const _ChannelHeader({
+    required this.displayName,
+    required this.username,
+    required this.role,
+    required this.bio,
+    required this.avatarUrl,
+    required this.initial,
+  });
+
+  final String displayName;
+  final String username;
+  final String role;
+  final String? bio;
+  final String? avatarUrl;
+  final String initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return _SurfacePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 42,
+                backgroundColor: colorScheme.primaryContainer,
+                backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty
+                    ? NetworkImage(avatarUrl!)
+                    : null,
+                child: avatarUrl == null || avatarUrl!.isEmpty
+                    ? Text(
+                        initial,
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '@$username',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    _RoleBadge(role: role),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (bio != null && bio!.trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              bio!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+          const SizedBox(height: 16),
+          const Row(
+            children: [
+              Expanded(child: _ChannelStat(label: 'Videos', value: '-')),
+              SizedBox(width: 8),
+              Expanded(child: _ChannelStat(label: 'Shorts', value: '-')),
+              SizedBox(width: 8),
+              Expanded(child: _ChannelStat(label: 'Followers', value: '-')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.role});
+
+  final String role;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        role,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w900,
+            ),
+      ),
+    );
+  }
+}
+
+class _ChannelStat extends StatelessWidget {
+  const _ChannelStat({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 2),
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChannelQuickActions extends StatelessWidget {
+  const _ChannelQuickActions({
+    required this.isCreator,
+    required this.onStudio,
+    required this.onUpload,
+    required this.onLive,
+  });
+
+  final bool isCreator;
+  final VoidCallback onStudio;
+  final VoidCallback onUpload;
+  final VoidCallback onLive;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: isCreator ? onUpload : null,
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('Upload'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: isCreator ? onLive : null,
+            icon: const Icon(Icons.sensors),
+            label: const Text('Go live'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          onPressed: isCreator ? onStudio : null,
+          icon: const Icon(Icons.dashboard_outlined),
+          tooltip: 'Creator Studio',
+        ),
+      ],
+    );
+  }
+}
+
+class _ChannelTabsPreview extends StatelessWidget {
+  const _ChannelTabsPreview();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SurfacePanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionTitle(
+            title: 'Channel',
+            subtitle: 'Your public content hub.',
+          ),
+          SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ChannelTabChip(icon: Icons.play_circle_outline, label: 'Videos'),
+              _ChannelTabChip(
+                  icon: Icons.video_library_outlined, label: 'Shorts'),
+              _ChannelTabChip(icon: Icons.sensors, label: 'Live'),
+              _ChannelTabChip(icon: Icons.info_outline, label: 'About'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChannelTabChip extends StatelessWidget {
+  const _ChannelTabChip({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 18),
+      label: Text(label),
     );
   }
 }
