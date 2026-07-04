@@ -29,6 +29,12 @@ export class FeedController {
     return this.feedService.creatorProfile(id);
   }
 
+  @Get(':type/:id/status')
+  @UseGuards(JwtAuthGuard)
+  status(@Param('type') type: 'video' | 'reel', @Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    return this.feedService.processingStatus(type, id, request.user);
+  }
+
   @Get(':type/:id')
   item(@Param('type') type: 'video' | 'reel', @Param('id') id: string) {
     return this.feedService.item(type, id);

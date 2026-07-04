@@ -1090,8 +1090,10 @@ class _UploadPageState extends State<UploadPage> {
 
       setState(() => _message = 'Publishing...');
 
+      final FeedItem publishedItem;
+
       if (_postType == FeedItemType.video) {
-        await _feedApi.publishVideo(
+        publishedItem = await _feedApi.publishVideo(
           session: widget.session,
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
@@ -1101,7 +1103,7 @@ class _UploadPageState extends State<UploadPage> {
           commentsEnabled: _commentsEnabled,
         );
       } else {
-        await _feedApi.publishReel(
+        publishedItem = await _feedApi.publishReel(
           session: widget.session,
           caption: _descriptionController.text.trim(),
           upload: upload,
@@ -1115,13 +1117,22 @@ class _UploadPageState extends State<UploadPage> {
         return;
       }
 
+      setState(() => _message = 'Upload queued. Processing video...');
+      final status = await _waitForProcessingComplete(publishedItem);
+
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _selectedFile = null;
         _selectedDuration = null;
         _commentsEnabled = true;
         _titleController.clear();
         _descriptionController.clear();
-        _message = 'Upload queued for processing.';
+        _message = status == null
+            ? 'Upload is still processing. It will appear in the feed soon.'
+            : 'Video published successfully.';
       });
     } catch (error) {
       if (mounted) {
@@ -1132,6 +1143,44 @@ class _UploadPageState extends State<UploadPage> {
         setState(() => _isPublishing = false);
       }
     }
+  }
+
+  Future<FeedProcessingStatus?> _waitForProcessingComplete(
+      FeedItem item) async {
+    for (var attempt = 0; attempt < 30; attempt += 1) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+
+      if (!mounted) {
+        return null;
+      }
+
+      final status = await _feedApi.processingStatus(
+        session: widget.session,
+        item: item,
+      );
+
+      if (!mounted) {
+        return null;
+      }
+
+      if (status.isPublished) {
+        return status;
+      }
+
+      if (status.isTerminalFailure) {
+        throw ApiException(
+          status.errorMessage ??
+              'Video processing failed. Try uploading the video again.',
+        );
+      }
+
+      setState(() {
+        _message =
+            'Processing video${status.processingStatus == null ? '' : ' (${status.processingStatus!.toLowerCase()})'}...';
+      });
+    }
+
+    return null;
   }
 
   @override
@@ -3568,7 +3617,6 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   @override
   void initState() {
     super.initState();
-    print(widget.url);
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
     _initializeFuture = _controller.initialize();
     _controller.setLooping(true);

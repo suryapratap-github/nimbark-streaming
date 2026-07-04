@@ -283,6 +283,74 @@ export class FeedService {
     return this.normalizeFeedItem(item);
   }
 
+  async processingStatus(type: FeedType, id: string, user?: AuthenticatedUser) {
+    this.ensureAuthenticated(user);
+
+    const post = type === 'video'
+      ? await this.prisma.video.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            creatorId: true,
+            status: true,
+            processingJobs: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                status: true,
+                errorMessage: true,
+                attempts: true,
+                maxAttempts: true,
+                updatedAt: true
+              }
+            }
+          }
+        })
+      : await this.prisma.reel.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            creatorId: true,
+            status: true,
+            processingJobs: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                status: true,
+                errorMessage: true,
+                attempts: true,
+                maxAttempts: true,
+                updatedAt: true
+              }
+            }
+          }
+        });
+
+    if (!post) {
+      throw new NotFoundException('Post is not available');
+    }
+
+    const isOwner = post.creatorId === user!.id;
+    const isAdmin = user!.role === UserRole.ADMIN;
+
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('You can only check your own upload status');
+    }
+
+    const job = post.processingJobs[0] ?? null;
+
+    return {
+      id: post.id,
+      type,
+      status: post.status,
+      processingStatus: job?.status ?? null,
+      errorMessage: job?.errorMessage ?? null,
+      attempts: job?.attempts ?? 0,
+      maxAttempts: job?.maxAttempts ?? 0,
+      updatedAt: job?.updatedAt ?? null
+    };
+  }
+
   async incrementView(type: FeedType, id: string, user?: AuthenticatedUser) {
     this.ensureAuthenticated(user);
     await this.ensurePublishedItem(type, id);

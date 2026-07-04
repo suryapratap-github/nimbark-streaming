@@ -67,6 +67,18 @@ class FeedApi {
     return FeedItem.fromJson(data, type, apiBaseUrl);
   }
 
+  Future<FeedProcessingStatus> processingStatus({
+    required AuthSession session,
+    required FeedItem item,
+  }) async {
+    final response = await _client.get(
+      Uri.parse('$apiBaseUrl/feed/${item.type.path}/${item.id}/status'),
+      headers: _headers(session.accessToken),
+    );
+    final data = _decode(response);
+    return FeedProcessingStatus.fromJson(data);
+  }
+
   Future<MediaSettings> mediaSettings() async {
     final response = await _client.get(Uri.parse('$apiBaseUrl/media/settings'));
     final data = _decode(response);
@@ -462,6 +474,30 @@ class ViewTrackResult {
     return ViewTrackResult(
       counted: json['counted'] as bool? ?? false,
       viewCount: json['viewCount'] as int? ?? 0,
+    );
+  }
+}
+
+class FeedProcessingStatus {
+  const FeedProcessingStatus({
+    required this.status,
+    this.processingStatus,
+    this.errorMessage,
+  });
+
+  final String status;
+  final String? processingStatus;
+  final String? errorMessage;
+
+  bool get isPublished => status == 'PUBLISHED';
+  bool get isRejected => status == 'REJECTED';
+  bool get isTerminalFailure => isRejected || processingStatus == 'FAILED';
+
+  factory FeedProcessingStatus.fromJson(Map<String, dynamic> json) {
+    return FeedProcessingStatus(
+      status: json['status'] as String? ?? 'PROCESSING',
+      processingStatus: json['processingStatus'] as String?,
+      errorMessage: json['errorMessage'] as String?,
     );
   }
 }
