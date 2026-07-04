@@ -947,17 +947,23 @@ class _FeedPageState extends State<FeedPage> {
 
                       return RefreshIndicator(
                         onRefresh: _refreshFeed,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
-                          itemBuilder: (context, index) => _FeedItemCard(
-                            item: items[index],
-                            session: widget.session,
-                            feedApi: _feedApi,
-                          ),
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 18),
-                          itemCount: items.length,
-                        ),
+                        child: _feedType == FeedItemType.reel
+                            ? _ShortsFeedView(
+                                items: items,
+                                session: widget.session,
+                                feedApi: _feedApi,
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+                                itemBuilder: (context, index) => _FeedItemCard(
+                                  item: items[index],
+                                  session: widget.session,
+                                  feedApi: _feedApi,
+                                ),
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 18),
+                                itemCount: items.length,
+                              ),
                       );
                     },
                   ),
@@ -3604,6 +3610,519 @@ class _FeedItemCardState extends State<_FeedItemCard>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ShortsFeedView extends StatefulWidget {
+  const _ShortsFeedView({
+    required this.items,
+    required this.session,
+    required this.feedApi,
+  });
+
+  final List<FeedItem> items;
+  final AuthSession session;
+  final FeedApi feedApi;
+
+  @override
+  State<_ShortsFeedView> createState() => _ShortsFeedViewState();
+}
+
+class _ShortsFeedViewState extends State<_ShortsFeedView> {
+  int _activeIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      scrollDirection: Axis.vertical,
+      itemCount: widget.items.length,
+      onPageChanged: (index) => setState(() => _activeIndex = index),
+      itemBuilder: (context, index) {
+        final item = widget.items[index];
+
+        return _ShortReelCard(
+          key: ValueKey(item.id),
+          item: item,
+          session: widget.session,
+          feedApi: widget.feedApi,
+          isActive: index == _activeIndex,
+        );
+      },
+    );
+  }
+}
+
+class _ShortReelCard extends StatefulWidget {
+  const _ShortReelCard({
+    required this.item,
+    required this.session,
+    required this.feedApi,
+    required this.isActive,
+    super.key,
+  });
+
+  final FeedItem item;
+  final AuthSession session;
+  final FeedApi feedApi;
+  final bool isActive;
+
+  @override
+  State<_ShortReelCard> createState() => _ShortReelCardState();
+}
+
+class _ShortReelCardState extends State<_ShortReelCard> {
+  late final VideoPlayerController _controller;
+  late final Future<void> _initializeFuture;
+  late int _likeCount;
+  late int _dislikeCount;
+  late int _commentCount;
+  late int _shareCount;
+  late int _viewCount;
+  bool _liked = false;
+  bool _disliked = false;
+  bool _trackedView = false;
+  bool _showPlayOverlay = false;
+  Timer? _viewTimer;
+
+  FeedItem get item => widget.item;
+
+  @override
+  void initState() {
+    super.initState();
+    _likeCount = item.likeCount;
+    _dislikeCount = item.dislikeCount;
+    _commentCount = item.commentCount;
+    _shareCount = item.shareCount;
+    _viewCount = item.viewCount;
+    _controller = VideoPlayerController.networkUrl(Uri.parse(item.mediaUrl));
+    _initializeFuture = _controller.initialize().then((_) {
+      _controller.setLooping(true);
+      if (mounted && widget.isActive) {
+        _play();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShortReelCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.isActive && !oldWidget.isActive) {
+      _play();
+    } else if (!widget.isActive && oldWidget.isActive) {
+      _pause();
+    }
+  }
+
+  @override
+  void dispose() {
+    _viewTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _play() {
+    if (!_controller.value.isInitialized) {
+      return;
+    }
+
+    _controller.play();
+    _startViewTimer();
+    setState(() => _showPlayOverlay = false);
+  }
+
+  void _pause() {
+    _viewTimer?.cancel();
+    if (_controller.value.isInitialized) {
+      _controller.pause();
+    }
+  }
+
+  void _togglePlayback() {
+    if (!_controller.value.isInitialized) {
+      return;
+    }
+
+    setState(() => _showPlayOverlay = !_controller.value.isPlaying);
+
+    if (_controller.value.isPlaying) {
+      _pause();
+      setState(() => _showPlayOverlay = true);
+    } else {
+      _play();
+    }
+  }
+
+  void _startViewTimer() {
+    if (_trackedView) {
+      return;
+    }
+
+    _viewTimer?.cancel();
+    _viewTimer = Timer(const Duration(seconds: 3), _trackView);
+  }
+
+  Future<void> _trackView() async {
+    if (_trackedView || !widget.isActive) {
+      return;
+    }
+
+    _trackedView = true;
+
+    try {
+      final result = await widget.feedApi.trackView(
+        session: widget.session,
+        item: item,
+      );
+      if (mounted) {
+        setState(() => _viewCount = result.viewCount);
+      }
+    } catch (_) {
+      _trackedView = false;
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    try {
+      await widget.feedApi.toggleLike(session: widget.session, item: item);
+      setState(() {
+        _liked = !_liked;
+        _likeCount += _liked ? 1 : -1;
+        if (_liked && _disliked) {
+          _disliked = false;
+          _dislikeCount = (_dislikeCount - 1).clamp(0, 1 << 31).toInt();
+        }
+      });
+    } catch (error) {
+      _showError(error);
+    }
+  }
+
+  Future<void> _toggleDislike() async {
+    try {
+      await widget.feedApi.toggleDislike(session: widget.session, item: item);
+      setState(() {
+        _disliked = !_disliked;
+        _dislikeCount += _disliked ? 1 : -1;
+        if (_disliked && _liked) {
+          _liked = false;
+          _likeCount = (_likeCount - 1).clamp(0, 1 << 31).toInt();
+        }
+      });
+    } catch (error) {
+      _showError(error);
+    }
+  }
+
+  Future<void> _share() async {
+    try {
+      await widget.feedApi.share(session: widget.session, item: item);
+      await Clipboard.setData(
+          ClipboardData(text: 'nimbark://${item.type.path}/${item.id}'));
+      if (mounted) {
+        setState(() => _shareCount += 1);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Post link copied.')));
+      }
+    } catch (error) {
+      _showError(error);
+    }
+  }
+
+  void _openDetail() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FeedDetailPage(
+          item: item,
+          session: widget.session,
+          feedApi: widget.feedApi,
+        ),
+      ),
+    );
+  }
+
+  void _showError(Object error) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(error.toString())));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _initializeFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _ShortsScaffold(
+            thumbnailUrl: item.thumbnailUrl,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: Icon(Icons.broken_image_outlined, color: Colors.white),
+            ),
+          );
+        }
+
+        return GestureDetector(
+          onTap: _togglePlayback,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(
+                color: Colors.black,
+                child: Center(
+                  child: SizedBox.expand(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: _controller.value.size.width,
+                        height: _controller.value.size.height,
+                        child: VideoPlayer(_controller),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      _themeAlpha(Colors.black, 0.2),
+                      Colors.transparent,
+                      _themeAlpha(Colors.black, 0.72),
+                    ],
+                    stops: const [0, 0.45, 1],
+                  ),
+                ),
+              ),
+              if (_showPlayOverlay)
+                const Center(
+                  child: Icon(Icons.play_arrow, color: Colors.white, size: 72),
+                ),
+              Positioned(
+                left: 16,
+                right: 92,
+                bottom: 24,
+                child: _ShortsCaption(
+                  item: item,
+                  viewCount: _viewCount,
+                  onOpenDetail: _openDetail,
+                ),
+              ),
+              Positioned(
+                right: 14,
+                bottom: 24,
+                child: _ShortsActionRail(
+                  liked: _liked,
+                  disliked: _disliked,
+                  likeCount: _likeCount,
+                  dislikeCount: _dislikeCount,
+                  commentCount: _commentCount,
+                  shareCount: _shareCount,
+                  onLike: _toggleLike,
+                  onDislike: _toggleDislike,
+                  onComment: _openDetail,
+                  onShare: _share,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ShortsScaffold extends StatelessWidget {
+  const _ShortsScaffold({
+    required this.child,
+    this.thumbnailUrl,
+  });
+
+  final Widget child;
+  final String? thumbnailUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty)
+          Image.network(thumbnailUrl!, fit: BoxFit.cover)
+        else
+          const ColoredBox(color: Colors.black),
+        ColoredBox(color: _themeAlpha(Colors.black, 0.44)),
+        child,
+      ],
+    );
+  }
+}
+
+class _ShortsCaption extends StatelessWidget {
+  const _ShortsCaption({
+    required this.item,
+    required this.viewCount,
+    required this.onOpenDetail,
+  });
+
+  final FeedItem item;
+  final int viewCount;
+  final VoidCallback onOpenDetail;
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTextStyle(
+      style: const TextStyle(color: Colors.white),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '@${item.creatorUsername}',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: onOpenDetail,
+            child: Text(
+              item.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ),
+          if (item.subtitle.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              item.subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text('$viewCount views',
+              style: const TextStyle(color: Colors.white70)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShortsActionRail extends StatelessWidget {
+  const _ShortsActionRail({
+    required this.liked,
+    required this.disliked,
+    required this.likeCount,
+    required this.dislikeCount,
+    required this.commentCount,
+    required this.shareCount,
+    required this.onLike,
+    required this.onDislike,
+    required this.onComment,
+    required this.onShare,
+  });
+
+  final bool liked;
+  final bool disliked;
+  final int likeCount;
+  final int dislikeCount;
+  final int commentCount;
+  final int shareCount;
+  final VoidCallback onLike;
+  final VoidCallback onDislike;
+  final VoidCallback onComment;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ShortsRailButton(
+          icon: liked ? Icons.thumb_up : Icons.thumb_up_outlined,
+          label: '$likeCount',
+          isActive: liked,
+          onTap: onLike,
+        ),
+        _ShortsRailButton(
+          icon: disliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+          label: '$dislikeCount',
+          isActive: disliked,
+          onTap: onDislike,
+        ),
+        _ShortsRailButton(
+          icon: Icons.mode_comment_outlined,
+          label: '$commentCount',
+          onTap: onComment,
+        ),
+        _ShortsRailButton(
+          icon: Icons.ios_share,
+          label: shareCount == 0 ? 'Share' : '$shareCount',
+          onTap: onShare,
+        ),
+      ],
+    );
+  }
+}
+
+class _ShortsRailButton extends StatelessWidget {
+  const _ShortsRailButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isActive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Column(
+          children: [
+            Container(
+              height: 48,
+              width: 48,
+              decoration: BoxDecoration(
+                color: _themeAlpha(Colors.black, 0.36),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: isActive ? const Color(0xFFFF6B6B) : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
