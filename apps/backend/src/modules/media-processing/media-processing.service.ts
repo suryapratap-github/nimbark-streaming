@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   MediaProcessingJobStatus,
@@ -18,13 +18,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_STALE_RUNNING_JOB_MS = 15 * 60 * 1000;
 
 type ProcessingJob = Prisma.MediaProcessingJobGetPayload<{
   include: { mediaAsset: true };
 }>;
 
 @Injectable()
-export class MediaProcessingService {
+export class MediaProcessingService implements OnModuleInit {
   private readonly logger = new Logger(MediaProcessingService.name);
   private isWorking = false;
 
@@ -33,6 +34,10 @@ export class MediaProcessingService {
     private readonly storage: StorageService,
     private readonly config: ConfigService
   ) {}
+
+  onModuleInit() {
+    void this.processNextQueuedJob();
+  }
 
   async enqueueVideo(videoId: string, mediaAssetId: string) {
     return this.enqueue(MediaProcessingJobType.TRANSCODE_VIDEO, mediaAssetId, { videoId });
@@ -82,6 +87,8 @@ export class MediaProcessingService {
   }
 
   private async claimNextJob() {
+    await this.requeueStaleRunningJobs();
+
     const queuedJob = await this.prisma.mediaProcessingJob.findFirst({
       where: { status: MediaProcessingJobStatus.QUEUED },
       orderBy: { createdAt: 'asc' },
@@ -102,6 +109,51 @@ export class MediaProcessingService {
       },
       include: { mediaAsset: true }
     });
+  }
+
+  private async requeueStaleRunningJobs() {
+    const staleAfterMs = this.staleRunningJobMs();
+    const staleBefore = new Date(Date.now() - staleAfterMs);
+
+    const staleJobs = await this.prisma.mediaProcessingJob.findMany({
+      where: {
+        status: MediaProcessingJobStatus.RUNNING,
+        startedAt: { lt: staleBefore }
+      },
+      select: {
+        id: true,
+        attempts: true,
+        maxAttempts: true
+      }
+    });
+    const retryableJobIds = staleJobs.filter((job) => job.attempts < job.maxAttempts).map((job) => job.id);
+
+    if (retryableJobIds.length === 0) {
+      return;
+    }
+
+    const result = await this.prisma.mediaProcessingJob.updateMany({
+      where: { id: { in: retryableJobIds } },
+      data: {
+        status: MediaProcessingJobStatus.QUEUED,
+        startedAt: null,
+        errorMessage: 'Requeued after worker shutdown or timeout'
+      }
+    });
+
+    if (result.count > 0) {
+      this.logger.warn(`Requeued ${result.count} stale media processing job(s)`);
+    }
+  }
+
+  private staleRunningJobMs() {
+    const configured = Number(this.config.get<string>('MEDIA_PROCESSING_STALE_JOB_MS'));
+
+    if (Number.isFinite(configured) && configured > 0) {
+      return configured;
+    }
+
+    return DEFAULT_STALE_RUNNING_JOB_MS;
   }
 
   private async processJob(job: ProcessingJob) {
