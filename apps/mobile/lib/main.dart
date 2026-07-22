@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -26,6 +27,7 @@ import 'features/profile/services/user_api.dart';
 
 bool _firebaseReady = false;
 const _themePreferenceKey = 'nimbark_theme_mode';
+const double _floatingNavContentClearance = 120;
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -86,6 +88,110 @@ enum AppThemePreference {
 
 Color _themeAlpha(Color color, double opacity) {
   return color.withAlpha((opacity.clamp(0, 1) * 255).round());
+}
+
+class _NimbarkTokens {
+  const _NimbarkTokens._();
+
+  static const double space1 = 8;
+  static const double space2 = 16;
+  static const double radius1 = 8;
+  static const double radius2 = 14;
+  static const double radius3 = 22;
+  static const Duration motionFast = Duration(milliseconds: 160);
+  static const Duration motionBase = Duration(milliseconds: 260);
+  static const Curve motionCurve = Curves.easeOutCubic;
+
+  static List<BoxShadow> elevation(BuildContext context, int level) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = _themeAlpha(Colors.black, isDark ? 0.42 : 0.12);
+    return switch (level) {
+      0 => const [],
+      1 => [
+          BoxShadow(color: color, blurRadius: 12, offset: const Offset(0, 6))
+        ],
+      2 => [
+          BoxShadow(color: color, blurRadius: 22, offset: const Offset(0, 12))
+        ],
+      _ => [
+          BoxShadow(color: color, blurRadius: 34, offset: const Offset(0, 18))
+        ],
+    };
+  }
+}
+
+class _NimbarkBrandMark extends StatelessWidget {
+  const _NimbarkBrandMark({this.size = 44});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      height: size,
+      width: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFF4B35), Color(0xFF7C3AED), Color(0xFF00A6A6)],
+        ),
+        borderRadius: BorderRadius.circular(size * 0.3),
+        boxShadow: [
+          BoxShadow(
+            color: _themeAlpha(const Color(0xFFFF4B35), 0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Icon(Icons.play_arrow_rounded,
+          color: colorScheme.onPrimary, size: size * 0.64),
+    );
+  }
+}
+
+class _PremiumSurface extends StatelessWidget {
+  const _PremiumSurface({
+    required this.child,
+    this.padding = const EdgeInsets.all(_NimbarkTokens.space2),
+    this.radius = _NimbarkTokens.radius2,
+    this.elevation = 1,
+    this.tinted = false,
+    super.key,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final int elevation;
+  final bool tinted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final fill = tinted
+        ? Color.lerp(colorScheme.primaryContainer, colorScheme.surface, 0.48)!
+        : _themeAlpha(colorScheme.surfaceContainerLow, 0.82);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: _themeAlpha(colorScheme.outline, 0.16)),
+            boxShadow: _NimbarkTokens.elevation(context, elevation),
+          ),
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+  }
 }
 
 class NimbarkApp extends StatefulWidget {
@@ -156,90 +262,153 @@ class _NimbarkAppState extends State<NimbarkApp> {
 
   ThemeData _buildTheme(Brightness brightness) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFE53935),
+      seedColor: const Color(0xFFFF4B35),
       brightness: brightness,
     );
+    final isDark = brightness == Brightness.dark;
+    final focusBorder = WidgetStateProperty.resolveWith<BorderSide?>((states) {
+      if (states.contains(WidgetState.disabled)) {
+        return BorderSide(color: _themeAlpha(colorScheme.outline, 0.12));
+      }
+      if (states.contains(WidgetState.focused)) {
+        return BorderSide(color: colorScheme.primary, width: 1.6);
+      }
+      return BorderSide(color: _themeAlpha(colorScheme.outline, 0.22));
+    });
 
     return ThemeData(
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
+      scaffoldBackgroundColor:
+          isDark ? const Color(0xFF08090D) : const Color(0xFFF8F7F4),
       appBarTheme: AppBarTheme(
         centerTitle: false,
-        backgroundColor: colorScheme.surface,
+        backgroundColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         titleTextStyle: TextStyle(
           color: colorScheme.onSurface,
-          fontSize: 24,
+          fontSize: 22,
           fontWeight: FontWeight.w900,
+          letterSpacing: 0,
         ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
-        color: colorScheme.surface,
+        color: colorScheme.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+        ),
       ),
       badgeTheme: BadgeThemeData(backgroundColor: colorScheme.primary),
       chipTheme: ChipThemeData(
         backgroundColor: colorScheme.surfaceContainerHighest,
-        selectedColor: colorScheme.onSurface,
+        selectedColor: colorScheme.primaryContainer,
         labelStyle: TextStyle(
           color: colorScheme.onSurface,
           fontWeight: FontWeight.w800,
         ),
         secondaryLabelStyle: TextStyle(
-          color: colorScheme.surface,
+          color: colorScheme.onPrimaryContainer,
           fontWeight: FontWeight.w900,
         ),
-        side: BorderSide.none,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        side: BorderSide(color: _themeAlpha(colorScheme.outline, 0.18)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius1),
+        ),
       ),
-      dividerTheme: DividerThemeData(color: colorScheme.outlineVariant),
+      dividerTheme:
+          DividerThemeData(color: _themeAlpha(colorScheme.outline, 0.16)),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(48, 48),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w900),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(48, 48),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          side: BorderSide(color: _themeAlpha(colorScheme.outline, 0.28)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w900),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          minimumSize: const Size(44, 44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(_NimbarkTokens.radius1),
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: _themeAlpha(colorScheme.surfaceContainerHighest, 0.58),
-        border: const OutlineInputBorder(),
+        fillColor: _themeAlpha(colorScheme.surfaceContainerHighest, 0.62),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+        ),
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+          borderSide: BorderSide(color: _themeAlpha(colorScheme.outline, 0.2)),
         ),
         focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
           borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+          borderSide: BorderSide(color: colorScheme.error, width: 1.2),
         ),
       ),
       listTileTheme: ListTileThemeData(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        tileColor: colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        tileColor: colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primaryContainer,
+        backgroundColor: Colors.transparent,
+        indicatorColor: _themeAlpha(colorScheme.primary, 0.16),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        height: 72,
+        height: 74,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        backgroundColor: colorScheme.inverseSurface,
+        contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: WidgetStateProperty.all(const Size(44, 44)),
+          side: focusBorder,
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+            ),
+          ),
+          textStyle: WidgetStateProperty.all(
+              const TextStyle(fontWeight: FontWeight.w900)),
+        ),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
       ),
       useMaterial3: true,
     );
@@ -496,43 +665,129 @@ class _AppShellState extends State<AppShell> {
     ];
 
     return Scaffold(
-      body: pages[currentIndex],
-      bottomNavigationBar: NavigationBar(
+      extendBody: true,
+      body: AnimatedSwitcher(
+        duration: _NimbarkTokens.motionBase,
+        switchInCurve: _NimbarkTokens.motionCurve,
+        switchOutCurve: Curves.easeInCubic,
+        child: Padding(
+          key: ValueKey(currentIndex),
+          padding: const EdgeInsets.only(bottom: _floatingNavContentClearance),
+          child: pages[currentIndex],
+        ),
+      ),
+      bottomNavigationBar: _FloatingNavBar(
         selectedIndex: currentIndex,
-        onDestinationSelected: (index) => setState(() => currentIndex = index),
-        destinations: [
-          const NavigationDestination(
-              icon: Icon(Icons.home_outlined), label: 'Home'),
-          const NavigationDestination(
-              icon: Icon(Icons.add_circle_outline), label: 'Create'),
-          const NavigationDestination(icon: Icon(Icons.sensors), label: 'Live'),
-          NavigationDestination(
-              icon: _NotificationNavIcon(count: _unreadNotifications),
-              label: 'Inbox'),
-          const NavigationDestination(
-              icon: Icon(Icons.person_outline), label: 'You'),
-        ],
+        unreadCount: _unreadNotifications,
+        onSelected: (index) => setState(() => currentIndex = index),
       ),
     );
   }
 }
 
-class _NotificationNavIcon extends StatelessWidget {
-  const _NotificationNavIcon({required this.count});
+class _FloatingNavBar extends StatelessWidget {
+  const _FloatingNavBar({
+    required this.selectedIndex,
+    required this.unreadCount,
+    required this.onSelected,
+  });
 
-  final int count;
+  final int selectedIndex;
+  final int unreadCount;
+  final ValueChanged<int> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    if (count <= 0) {
-      return const Icon(Icons.notifications_outlined);
-    }
+    final items = [
+      (Icons.home_rounded, Icons.home_outlined, 'Home'),
+      (Icons.add_circle_rounded, Icons.add_circle_outline, 'Create'),
+      (Icons.sensors_rounded, Icons.sensors, 'Live'),
+      (Icons.notifications_rounded, Icons.notifications_outlined, 'Inbox'),
+      (Icons.person_rounded, Icons.person_outline, 'You'),
+    ];
 
-    final label = count > 99 ? '99+' : '$count';
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: _PremiumSurface(
+        padding: const EdgeInsets.all(_NimbarkTokens.space1),
+        radius: 28,
+        elevation: 3,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (var index = 0; index < items.length; index++)
+              Expanded(
+                child: _FloatingNavItem(
+                  selected: selectedIndex == index,
+                  icon: selectedIndex == index
+                      ? items[index].$1
+                      : items[index].$2,
+                  label: items[index].$3,
+                  badgeCount: index == 3 ? unreadCount : 0,
+                  onTap: () => onSelected(index),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-    return Badge(
-      label: Text(label),
-      child: const Icon(Icons.notifications_outlined),
+class _FloatingNavItem extends StatelessWidget {
+  const _FloatingNavItem({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.badgeCount,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final int badgeCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foreground = selected
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onSurfaceVariant;
+
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: _NimbarkTokens.motionBase,
+          curve: _NimbarkTokens.motionCurve,
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? _themeAlpha(colorScheme.primaryContainer, 0.9)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              badgeCount > 0
+                  ? Badge(
+                      label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
+                      child: Icon(icon, color: foreground, size: 23),
+                    )
+                  : Icon(icon, color: foreground, size: 23),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -552,39 +807,40 @@ class _PageIntro extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themeAlpha(colorScheme.primaryContainer, 0.64),
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return _PremiumSurface(
+      tinted: true,
+      elevation: 2,
+      padding: const EdgeInsets.all(_NimbarkTokens.space2),
       child: Row(
         children: [
-          Container(
-            height: 44,
-            width: 44,
-            decoration: BoxDecoration(
-              color: colorScheme.primary,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: colorScheme.onPrimary),
-          ),
-          const SizedBox(width: 12),
+          const _NimbarkBrandMark(size: 48),
+          const SizedBox(width: _NimbarkTokens.space2),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w900),
+                Row(
+                  children: [
+                    Icon(icon, size: 18, color: colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
                   subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
@@ -607,12 +863,7 @@ class _SurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: child,
-      ),
-    );
+    return _PremiumSurface(child: child);
   }
 }
 
@@ -632,9 +883,9 @@ class _MetaPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
+        color: _themeAlpha(colorScheme.surfaceContainerHighest, 0.76),
+        border: Border.all(color: _themeAlpha(colorScheme.outline, 0.18)),
+        borderRadius: BorderRadius.circular(_NimbarkTokens.radius1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -709,26 +960,38 @@ class _FeedActionButton extends StatelessWidget {
         isActive ? colorScheme.primary : colorScheme.onSurfaceVariant;
 
     return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: foreground, size: 22),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-            ],
+      child: AnimatedScale(
+        duration: _NimbarkTokens.motionFast,
+        scale: isActive ? 1.04 : 1,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: _NimbarkTokens.motionFast,
+            curve: _NimbarkTokens.motionCurve,
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? _themeAlpha(colorScheme.primaryContainer, 0.64)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(_NimbarkTokens.radius2),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: foreground, size: 22),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -831,26 +1094,15 @@ class _FeedPageState extends State<FeedPage> {
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            /*Container(
-              height: 28,
-              width: 38,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.play_arrow,
-                color: Theme.of(context).colorScheme.onPrimary,
-              ),
-            ),
-            const SizedBox(width: 8),*/
-            Text('Nimbark Streaming'),
+            _NimbarkBrandMark(size: 34),
+            SizedBox(width: 10),
+            Text('Nimbark'),
           ],
         ),
         actions: [
           if (widget.session.user.role == 'CREATOR' ||
               widget.session.user.role == 'ADMIN')
-            IconButton(
+            IconButton.filledTonal(
               onPressed: _openCreatorDashboard,
               icon: const Icon(Icons.dashboard_outlined),
               tooltip: 'Creator dashboard',
@@ -868,21 +1120,40 @@ class _FeedPageState extends State<FeedPage> {
       ),
       body: Column(
         children: [
-          if (_searchOpen)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search Nimbark',
-                ),
-                onChanged: _setSearchQuery,
-              ),
-            ),
+          AnimatedSwitcher(
+            duration: _NimbarkTokens.motionBase,
+            switchInCurve: _NimbarkTokens.motionCurve,
+            child: _searchOpen
+                ? Padding(
+                    key: const ValueKey('search'),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search creators, videos, shorts',
+                      ),
+                      onChanged: _setSearchQuery,
+                    ),
+                  )
+                : Padding(
+                    key: const ValueKey('intro'),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _PageIntro(
+                      title: _feedType == FeedItemType.video
+                          ? 'Watch what is rising'
+                          : 'Swipe through shorts',
+                      subtitle:
+                          'Creator-first discovery with fast playback, comments, sharing, and live handoff.',
+                      icon: _feedType == FeedItemType.video
+                          ? Icons.auto_awesome_outlined
+                          : Icons.swipe_vertical_outlined,
+                    ),
+                  ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -948,7 +1219,8 @@ class _FeedPageState extends State<FeedPage> {
                                 feedApi: _feedApi,
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 8, 16, 112),
                                 itemBuilder: (context, index) => _FeedItemCard(
                                   item: items[index],
                                   session: widget.session,
@@ -3863,132 +4135,135 @@ class _FeedItemCardState extends State<_FeedItemCard>
     final canDelete = item.creatorId == widget.session.user.id;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return DecoratedBox(
+    return _PremiumSurface(
       key: _cardKey,
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _FeedVideoPlayer(
-            url: item.mediaUrl,
-            thumbnailUrl: item.thumbnailUrl,
-            onPlayingChanged: _handlePlayingChanged,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: _openCreatorProfile,
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: colorScheme.primaryContainer,
-                    child: Text(
-                      _initial(item.creatorUsername),
-                      style: TextStyle(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w900,
+      padding: EdgeInsets.zero,
+      radius: _NimbarkTokens.radius3,
+      elevation: 2,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_NimbarkTokens.radius3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _FeedVideoPlayer(
+              url: item.mediaUrl,
+              thumbnailUrl: item.thumbnailUrl,
+              onPlayingChanged: _handlePlayingChanged,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: _openCreatorProfile,
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: colorScheme.primaryContainer,
+                      child: Text(
+                        _initial(item.creatorUsername),
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: _openDetail,
-                        child: Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w900),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: _openDetail,
+                          child: Text(
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '@${item.creatorUsername} • $_viewCount views',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: colorScheme.onSurfaceVariant),
-                      ),
-                      if (item.subtitle.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
-                          item.subtitle,
-                          maxLines: 2,
+                          '@${item.creatorUsername} • $_viewCount views',
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(color: colorScheme.onSurfaceVariant),
                         ),
+                        if (item.subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            item.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                TextStyle(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ],
                       ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Post actions',
+                    onSelected: (value) {
+                      if (value == 'open') {
+                        _openDetail();
+                      } else if (value == 'report') {
+                        _reportPost();
+                      } else if (value == 'delete') {
+                        _deletePost();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'open', child: Text('Open')),
+                      const PopupMenuItem(
+                          value: 'report', child: Text('Report')),
+                      if (canDelete)
+                        const PopupMenuItem(
+                            value: 'delete', child: Text('Delete')),
                     ],
                   ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Post actions',
-                  onSelected: (value) {
-                    if (value == 'open') {
-                      _openDetail();
-                    } else if (value == 'report') {
-                      _reportPost();
-                    } else if (value == 'delete') {
-                      _deletePost();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'open', child: Text('Open')),
-                    const PopupMenuItem(value: 'report', child: Text('Report')),
-                    if (canDelete)
-                      const PopupMenuItem(
-                          value: 'delete', child: Text('Delete')),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-            child: Row(
-              children: [
-                _FeedActionButton(
-                  icon: _liked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                  label: '$_likeCount',
-                  isActive: _liked,
-                  onTap: _toggleLike,
-                ),
-                _FeedActionButton(
-                  icon:
-                      _disliked ? Icons.thumb_down : Icons.thumb_down_outlined,
-                  label: '$_dislikeCount',
-                  isActive: _disliked,
-                  onTap: _toggleDislike,
-                ),
-                _FeedActionButton(
-                  icon: Icons.mode_comment_outlined,
-                  label: '$_commentCount',
-                  onTap: _showComments,
-                ),
-                _FeedActionButton(
-                  icon: Icons.ios_share,
-                  label: 'Share',
-                  onTap: _share,
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: Row(
+                children: [
+                  _FeedActionButton(
+                    icon: _liked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                    label: '$_likeCount',
+                    isActive: _liked,
+                    onTap: _toggleLike,
+                  ),
+                  _FeedActionButton(
+                    icon: _disliked
+                        ? Icons.thumb_down
+                        : Icons.thumb_down_outlined,
+                    label: '$_dislikeCount',
+                    isActive: _disliked,
+                    onTap: _toggleDislike,
+                  ),
+                  _FeedActionButton(
+                    icon: Icons.mode_comment_outlined,
+                    label: '$_commentCount',
+                    onTap: _showComments,
+                  ),
+                  _FeedActionButton(
+                    icon: Icons.ios_share,
+                    label: 'Share',
+                    onTap: _share,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -4527,6 +4802,9 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
   late final Future<void> _initializeFuture;
   bool _lastPlayingState = false;
   bool _hasStartedPlayback = false;
+  bool _controlsVisible = true;
+  bool _screenLocked = false;
+  double _playbackSpeed = 1;
 
   @override
   void initState() {
@@ -4556,6 +4834,44 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
     widget.onPlayingChanged?.call(isPlaying);
   }
 
+  void _togglePlayback() {
+    if (_screenLocked) {
+      setState(() => _controlsVisible = !_controlsVisible);
+      return;
+    }
+
+    setState(() {
+      if (_controller.value.isPlaying) {
+        _controller.pause();
+      } else {
+        _hasStartedPlayback = true;
+        _controller.play();
+      }
+    });
+  }
+
+  Future<void> _seekBy(Duration delta) async {
+    if (!_controller.value.isInitialized || _screenLocked) {
+      return;
+    }
+
+    final duration = _controller.value.duration;
+    final target = _controller.value.position + delta;
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : target > duration
+            ? duration
+            : target;
+    await _controller.seekTo(clamped);
+  }
+
+  Future<void> _setPlaybackSpeed(double speed) async {
+    await _controller.setPlaybackSpeed(speed);
+    if (mounted) {
+      setState(() => _playbackSpeed = speed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
@@ -4579,15 +4895,12 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
         }
 
         return GestureDetector(
-          onTap: () {
-            setState(() {
-              if (_controller.value.isPlaying) {
-                _controller.pause();
-              } else {
-                _hasStartedPlayback = true;
-                _controller.play();
-              }
-            });
+          onTap: _togglePlayback,
+          onDoubleTapDown: (details) {
+            final width = MediaQuery.of(context).size.width;
+            _seekBy(details.localPosition.dx < width / 2
+                ? const Duration(seconds: -10)
+                : const Duration(seconds: 10));
           },
           child: Stack(
             alignment: Alignment.center,
@@ -4611,6 +4924,22 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
                       : _controller.value.aspectRatio,
                   child: VideoPlayer(_controller),
                 ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        _themeAlpha(Colors.black, 0.5),
+                        Colors.transparent,
+                        _themeAlpha(Colors.black, 0.62),
+                      ],
+                      stops: const [0, 0.42, 1],
+                    ),
+                  ),
+                ),
+              ),
               if (!_controller.value.isPlaying)
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -4621,6 +4950,20 @@ class _FeedVideoPlayerState extends State<_FeedVideoPlayer> {
                     padding: EdgeInsets.all(12),
                     child:
                         Icon(Icons.play_arrow, color: Colors.white, size: 34),
+                  ),
+                ),
+              if (_controlsVisible)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 10,
+                  child: _VideoControlDock(
+                    controller: _controller,
+                    playbackSpeed: _playbackSpeed,
+                    locked: _screenLocked,
+                    onSpeedChanged: _setPlaybackSpeed,
+                    onToggleLock: () =>
+                        setState(() => _screenLocked = !_screenLocked),
                   ),
                 ),
             ],
@@ -4661,6 +5004,151 @@ class _VideoThumbnailPlaceholder extends StatelessWidget {
         ColoredBox(color: _themeAlpha(Colors.black, 0.28)),
         Center(child: child),
       ],
+    );
+  }
+}
+
+class _VideoControlDock extends StatelessWidget {
+  const _VideoControlDock({
+    required this.controller,
+    required this.playbackSpeed,
+    required this.locked,
+    required this.onSpeedChanged,
+    required this.onToggleLock,
+  });
+
+  final VideoPlayerController controller;
+  final double playbackSpeed;
+  final bool locked;
+  final ValueChanged<double> onSpeedChanged;
+  final VoidCallback onToggleLock;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = controller.value;
+    final duration = value.duration.inMilliseconds;
+    final position = value.position.inMilliseconds.clamp(0, duration);
+    final progress = duration == 0 ? 0.0 : position / duration;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _themeAlpha(Colors.black, 0.46),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _themeAlpha(Colors.white, 0.16)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    minHeight: 4,
+                    value: progress,
+                    backgroundColor: _themeAlpha(Colors.white, 0.2),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Color(0xFFFFD166)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _VideoDockButton(
+                      icon: locked ? Icons.lock : Icons.lock_open,
+                      tooltip: locked ? 'Unlock screen' : 'Lock screen',
+                      onPressed: onToggleLock,
+                    ),
+                    const Spacer(),
+                    if (!locked) ...[
+                      _VideoDockButton(
+                        icon: Icons.picture_in_picture_alt_outlined,
+                        tooltip: 'Picture in picture',
+                        onPressed: () => _showDockMessage(
+                          context,
+                          'Picture in picture is ready for native wiring.',
+                        ),
+                      ),
+                      _VideoDockButton(
+                        icon: Icons.closed_caption_outlined,
+                        tooltip: 'Captions',
+                        onPressed: () => _showDockMessage(
+                          context,
+                          'Captions will appear when a caption track exists.',
+                        ),
+                      ),
+                      PopupMenuButton<double>(
+                        tooltip: 'Playback speed',
+                        initialValue: playbackSpeed,
+                        onSelected: onSpeedChanged,
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 0.5, child: Text('0.5x')),
+                          PopupMenuItem(value: 1, child: Text('1x')),
+                          PopupMenuItem(value: 1.25, child: Text('1.25x')),
+                          PopupMenuItem(value: 1.5, child: Text('1.5x')),
+                          PopupMenuItem(value: 2, child: Text('2x')),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            '${playbackSpeed.toStringAsFixed(playbackSpeed.truncateToDouble() == playbackSpeed ? 0 : 2)}x',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                      _VideoDockButton(
+                        icon: Icons.bedtime_outlined,
+                        tooltip: 'Sleep timer',
+                        onPressed: () => _showDockMessage(
+                          context,
+                          'Sleep timer controls can attach here.',
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDockMessage(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _VideoDockButton extends StatelessWidget {
+  const _VideoDockButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      iconSize: 20,
+      color: Colors.white,
+      onPressed: onPressed,
+      icon: Icon(icon),
     );
   }
 }
@@ -4971,98 +5459,99 @@ class _LivePageState extends State<LivePage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: () async => _refreshRooms(),
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            Text('Live', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 8),
-            Text(
-              _canGoLive
-                  ? 'Create a live room or join sessions already running.'
-                  : 'Join ongoing live sessions from creators.',
-            ),
-            const SizedBox(height: 24),
-            if (_canGoLive) ...[
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Live title',
-                  prefixIcon: Icon(Icons.title),
-                ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Live')),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async => _refreshRooms(),
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(
+                _canGoLive
+                    ? 'Create a live room or join sessions already running.'
+                    : 'Join ongoing live sessions from creators.',
               ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _isCreating ? null : _goLive,
-                icon: _isCreating
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sensors),
-                label: const Text('Go live'),
-              ),
-              const SizedBox(height: 28),
-            ],
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Ongoing live',
-                      style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 24),
+              if (_canGoLive) ...[
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Live title',
+                    prefixIcon: Icon(Icons.title),
+                  ),
                 ),
-                IconButton(
-                  onPressed: _refreshRooms,
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Refresh',
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _isCreating ? null : _goLive,
+                  icon: _isCreating
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sensors),
+                  label: const Text('Go live'),
                 ),
+                const SizedBox(height: 28),
               ],
-            ),
-            const SizedBox(height: 8),
-            FutureBuilder<List<LiveRoom>>(
-              future: _roomsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                if (snapshot.hasError) {
-                  return Text(snapshot.error.toString());
-                }
-
-                final rooms = snapshot.data ?? const [];
-
-                if (rooms.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Text('No one is live right now.'),
-                  );
-                }
-
-                return Column(
-                  children: rooms.map((room) {
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.sensors),
-                        title: Text(room.title),
-                        subtitle: Text(room.hostName == null
-                            ? room.status
-                            : '${room.hostName} • ${room.status}'),
-                        trailing: FilledButton(
-                          onPressed: () => _joinRoom(room),
-                          child: const Text('Join'),
-                        ),
-                      ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Ongoing live',
+                        style: Theme.of(context).textTheme.titleLarge),
+                  ),
+                  IconButton(
+                    onPressed: _refreshRooms,
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Refresh',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FutureBuilder<List<LiveRoom>>(
+                future: _roomsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator()),
                     );
-                  }).toList(),
-                );
-              },
-            ),
-          ],
+                  }
+
+                  if (snapshot.hasError) {
+                    return Text(snapshot.error.toString());
+                  }
+
+                  final rooms = snapshot.data ?? const [];
+
+                  if (rooms.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text('No one is live right now.'),
+                    );
+                  }
+
+                  return Column(
+                    children: rooms.map((room) {
+                      return Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.sensors),
+                          title: Text(room.title),
+                          subtitle: Text(room.hostName == null
+                              ? room.status
+                              : '${room.hostName} • ${room.status}'),
+                          trailing: FilledButton(
+                            onPressed: () => _joinRoom(room),
+                            child: const Text('Join'),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -7411,20 +7900,6 @@ class _ProfilePageState extends State<ProfilePage> {
               onRestorePurchases: _restoreRevenueCatPurchases,
               onSyncSubscription: _syncRevenueCatSubscription,
             ),
-          if (user.role != 'USER') ...[
-            OutlinedButton.icon(
-              onPressed: _openCreatorDashboard,
-              icon: const Icon(Icons.dashboard_outlined),
-              label: const Text('My videos and reels'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          OutlinedButton.icon(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            label: const Text('Logout'),
-          ),
-          const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _isDeleting ? null : _deleteProfile,
             icon: _isDeleting

@@ -551,8 +551,8 @@ export function App() {
       <main className="auth-page">
         <section className="auth-panel">
           <div>
-            <p>Admin Access</p>
-            <h1>Nimbark Admin</h1>
+            <p>Creator operations</p>
+            <h1>Nimbark Control</h1>
           </div>
 
           <form className="auth-form" onSubmit={handleAuthSubmit}>
@@ -624,8 +624,10 @@ export function App() {
 
       <section className="content">
         <header>
-          <p>Operations</p>
-          <h2>{viewTitle(activeView)}</h2>
+          <div>
+            <p>Operations</p>
+            <h2>{viewTitle(activeView)}</h2>
+          </div>
         </header>
         {renderContent()}
       </section>
